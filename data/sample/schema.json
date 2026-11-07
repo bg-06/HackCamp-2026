@@ -1,0 +1,72 @@
+{
+  "dataset": "3-1-1-service-requests",
+  "records_count": 1324622,
+  "data_processed": "2026-11-07T15:05:06+00:00",
+  "fields": [
+    {
+      "name": "department",
+      "type": "text",
+      "label": "Department"
+    },
+    {
+      "name": "service_request_type",
+      "type": "text",
+      "label": "Service request type"
+    },
+    {
+      "name": "status",
+      "type": "text",
+      "label": "Status"
+    },
+    {
+      "name": "closure_reason",
+      "type": "text",
+      "label": "Closure reason"
+    },
+    {
+      "name": "service_request_open_timestamp",
+      "type": "datetime",
+      "label": "Service request open timestamp"
+    },
+    {
+      "name": "service_request_close_date",
+      "type": "date",
+      "label": "Service request close date"
+    },
+    {
+      "name": "last_modified_timestamp",
+      "type": "datetime",
+      "label": "Last modified timestamp"
+    },
+    {
+      "name": "address",
+      "type": "text",
+      "label": "Address"
+    },
+    {
+      "name": "local_area",
+      "type": "text",
+      "label": "Local area"
+    },
+    {
+      "name": "channel",
+      "type": "text",
+      "label": "Channel"
+    },
+    {
+      "name": "latitude",
+      "type": "double",
+      "label": "Latitude"
+    },
+    {
+      "name": "longitude",
+      "type": "double",
+      "label": "Longitude"
+    },
+    {
+      "name": "geom",
+      "type": "geo_point_2d",
+      "label": "geom"
+    }
+  ]
+}
