@@ -84,11 +84,13 @@ In plain words:
 
 City of Vancouver Open Data Portal (Opendatasoft):
 
-- `3-1-1-service-requests`: records from August 2022 onward (after the City's system upgrade)
+- `3-1-1-service-requests`: 1.32M records from January 2022 onward, about 270k a year
 - `3-1-1-service-requests-2009-2021`: historical; skip it this weekend unless everything else is done
 
-Useful fields (confirm on the dataset schema page):
-`department`, `service_request_type`, `status`, `closure_reason`, `service_request_open_timestamp`, `service_request_close_date`, `last_modified_timestamp`, `address`, `local_area`, `channel`, `latitude`, `longitude`
+Fields (confirmed, full profile in [docs/data-shape.md](docs/data-shape.md)):
+`department`, `service_request_type`, `status`, `closure_reason`, `service_request_open_timestamp`, `service_request_close_date`, `last_modified_timestamp`, `address`, `local_area`, `channel`, `latitude`, `longitude`, `geom` (duplicate of lat/lon, drop it)
+
+A sample, schema and profile are already in `data/sample/`. Run `python scripts/pull_311_sample.py --full` to get the full 48 MB parquet into `data/raw/` (gitignored) for the first load.
 
 ```
 # Full export for the one-time load
@@ -100,9 +102,12 @@ https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/3-1-1-service-re
 
 Notes:
 
-- Some request types have withheld addresses and some don't geocode. They appear in tables, not on the map.
-- There may be no public case ID, so we build a synthetic key.
-- City data likely refreshes daily. Pitch "live" as real-time resident reports plus daily City data.
+- **Only 34% of rows have coordinates.** It depends on the request type: 109 of 256 types are geocoded, and big ones (building inquiries, missed bin pickups, parking enforcement, noise) never are. Those appear in area pages and tables, not on the map. 21% of rows have no `local_area` either.
+- **There's no public case ID, and no natural key.** Even combining every column, about 1% of rows (mostly bulk-entered cases with no address) look identical. See 5.4 for how we handle it.
+- **Timezones are mixed.** `service_request_open_timestamp` and `last_modified_timestamp` are UTC; `service_request_close_date` is a Vancouver local date. Convert before subtracting or 44k cases get negative resolution times.
+- `status` is only `Open` or `Close`. `closure_reason` is never null (uses `N/A` / `Unknown`).
+- Median resolution is 2 days, p90 16 days, p99 172 days.
+- The portal refreshes daily (last processed 2026-11-07). A week of modifications is about 6.7k records. Pitch "live" as real-time resident reports plus daily City data.
 
 ---
 
@@ -161,7 +166,7 @@ LANDING = "/Volumes/bbb/raw/landing/311"
 
 spark.sql("CREATE TABLE IF NOT EXISTS bbb.raw.watermark (source STRING, last_ts TIMESTAMP)")
 since = spark.sql("SELECT max(last_ts) ts FROM bbb.raw.watermark WHERE source='311'").first().ts \
-        or dt.datetime(2022, 8, 17)
+        or dt.datetime(2022, 1, 1)
 
 resp = requests.get(BASE, params={"where": f"last_modified_timestamp > date'{since:%Y-%m-%d}'"}, timeout=120)
 resp.raise_for_status()
@@ -208,12 +213,13 @@ def t311_cases():
             "department",
             F.col("service_request_type").alias("request_type"),
             "status", "closure_reason",
-            F.to_timestamp("service_request_open_timestamp").alias("opened_at"),
+            F.from_utc_timestamp(F.to_timestamp("service_request_open_timestamp"), "America/Vancouver").alias("opened_at"),
             F.to_date("service_request_close_date").alias("closed_on"),
             F.to_timestamp("last_modified_timestamp").alias("modified_at"),
             "address", "local_area", "channel",
             F.col("latitude").cast("double"), F.col("longitude").cast("double")))
-    return (df.withColumn("case_key", F.sha2(F.concat_ws("|", "request_type", "opened_at", "address", "local_area"), 256))
+    key_cols = ["department", "request_type", "opened_at", "address", "local_area", "channel", "latitude", "longitude"]
+    return (df.withColumn("case_key", F.sha2(F.concat_ws("|", *key_cols), 256))
               .withColumn("h3_r9", F.expr("h3_longlatash3string(longitude, latitude, 9)")))
 
 # Keep only the latest version of each case
@@ -228,6 +234,12 @@ dp.create_auto_cdc_flow(
 ```
 
 If `create_auto_cdc_flow` isn't recognised, the older name is `apply_changes`.
+
+Notes from the data pull:
+
+- `opened_at` is stored in Vancouver local time so it lines up with `closed_on` (a local date) and with "this week" in summaries.
+- `case_key` still collides on about 12.8k of 1.32M rows (1%), mostly bulk-entered cases with no address or coordinates, so CDC merges each group into one. That's acceptable: those rows mostly have no location and don't reach the map. If exact counts matter for the dashboard, compute them from `bbb.silver.t311_cases` (append-only) instead.
+- The `in_vancouver` expectation passes on 99.999% of geocoded rows, so warn-only is right.
 
 Gold views (SQL is fine here and easy to show on screen):
 
@@ -248,7 +260,7 @@ LEFT JOIN bbb.gold.type_categories t USING (request_type);
 CREATE OR REFRESH MATERIALIZED VIEW bbb.gold.hotspots_h3 AS
 SELECT h3_r9, category, count(*) AS open_count
 FROM bbb.gold.cases_enriched
-WHERE status NOT ILIKE 'close%' AND opened_at >= current_date() - INTERVAL 90 DAYS
+WHERE status = 'Open' AND h3_r9 IS NOT NULL AND opened_at >= current_date() - INTERVAL 90 DAYS
 GROUP BY h3_r9, category;
 
 CREATE OR REFRESH MATERIALIZED VIEW bbb.gold.area_weekly AS
@@ -261,11 +273,12 @@ CREATE OR REFRESH MATERIALIZED VIEW bbb.gold.recurring_issues AS
 SELECT h3_r9, request_type, count(*) AS times_reported,
        count(DISTINCT date_trunc('month', opened_at)) AS months_seen
 FROM bbb.gold.cases_enriched
+WHERE h3_r9 IS NOT NULL
 GROUP BY ALL
 HAVING months_seen >= 4;
 ```
 
-Check the real closed status value in the data and adjust the filter.
+`status` only takes `Open` and `Close` (checked), so the filters use `status = 'Open'`. `recurring_issues` also needs `h3_r9 IS NOT NULL`, or all the ungeocoded cases pile into one null cell.
 
 ### 5.5 AI Functions for summaries and report matching
 
@@ -309,7 +322,7 @@ USING (
     ON c.category = n.category
    AND array_contains(h3_kring(n.h3_r9, 1), c.h3_r9)
    AND c.opened_at >= current_date() - INTERVAL 30 DAYS
-   AND c.status NOT ILIKE 'close%'
+   AND c.status = 'Open'
   GROUP BY n.report_id, n.category, n.h3_r9
 ) s ON m.report_id = s.report_id
 WHEN NOT MATCHED THEN INSERT *;
@@ -369,7 +382,7 @@ Scaffold with `npm create deepspace@latest blockbyblock`, run locally with `npx 
 Pages:
 
 - `/` Landing: one-line pitch and "Open the map"
-- `/home` Map (public, no sign-in needed). Toggle pins and hexagons, category chips, neighbourhood picker
+- `/home` Map (public, no sign-in needed). Toggle pins and hexagons, category chips, neighbourhood picker. Only about a third of City cases have coordinates, so add a small "N more cases in this area aren't mapped" note to be honest about it
 - `/area/:name` Neighbourhood page: weekly AI summary, trend chart, recurring issues, live forum channel
 - `/report` (signed in) Drop a pin, describe the issue, add a photo. Shows "already reported" with the matched City case, or the agent's 311 draft with a copy button and a link to the City's reporting page
 - `/moderate` Moderator console (Auth0, section 7)
@@ -469,7 +482,12 @@ block-by-block/
 ├── app/                       # DeepSpace project
 ├── agent/                     # Maritime Block Steward
 ├── n8n/                       # exported workflow JSON
+├── scripts/pull_311_sample.py # pulls schema, sample and profile (--full for the parquet)
+├── data/
+│   ├── sample/                # committed: schema, 1-week sample, profile
+│   └── raw/                   # gitignored: full parquet export
 ├── docs/
+│   ├── data-shape.md          # field-by-field notes from the data pull
 │   ├── FREEBUFF_LOG.md
 │   ├── impact-statement.md
 │   └── accessibility.md
@@ -494,7 +512,7 @@ Everyone uses Freebuff.
 ## 12. Timeline (24 hours)
 
 **Hour 0 to 1**
-- Databricks trial live, network test run, 311 parquet uploaded
+- Databricks trial live, network test run, 311 parquet uploaded (run `scripts/pull_311_sample.py --full` to get it)
 - DeepSpace app scaffolded and deployed once (empty) so deploys are proven
 - Maritime box created, Auth0 tenant, API and M2M apps created
 - n8n account ready, Freebuff installed on every laptop
@@ -556,3 +574,77 @@ Everyone uses Freebuff.
 | Privacy | Never show withheld addresses; strip photo metadata on upload |
 
 ---
+
+## 15. Open questions for the team
+
+- Are we registered as a beginner team? If yes, also opt into Most Accessible Design and Best Problem-Solution Fit (more Tailscale chances)
+- Does anyone already have n8n Cloud, or do we self-host it in the Maritime box?
+- Who records the video, and when
+
+---
+
+## 16. Other additions if we have time
+
+Only start these once the core loop (map, report flow, matching, agent triage) works end to end and is deployed. If more than one is possible, do them in this order.
+
+### 16.1 Photo-based reporting (first pick)
+
+A resident takes a photo of the problem and the report form fills itself in.
+
+Why it's worth it:
+
+- Residents don't have to know the City's request types; the photo does the categorising
+- Gives the matching query a better category and description to work with
+- Strong live demo moment, and helps Best Design, Community Impact and accessibility (people who struggle to write a description can still report)
+- Gives the Gemini opt-in real usage
+
+Flow:
+
+1. Resident takes or uploads a photo on `/report`; the pin is filled from the photo's location or the phone's GPS
+2. DeepSpace worker sends the image to Gemini and gets back JSON: category (one of our ten), one-line description, severity (low, medium, high), and whether the photo shows a public issue at all
+3. The form shows the suggestion as editable fields; the resident confirms or changes it. Never save the AI's guess without confirmation
+4. Report saves to DeepSpace as usual; n8n, Databricks matching and the agent take over unchanged
+
+Why Gemini and not Databricks for this step: the resident is waiting on the form, so the answer needs to come back in a second or two. A Databricks job or a cold SQL warehouse is too slow for that.
+
+How Databricks still benefits:
+
+- Store `ai_category`, `ai_description` and `ai_severity` with the report in `bbb.silver.resident_reports`; the matching query uses `ai_category` when the resident didn't change it
+- Optional extra: a nightly Databricks batch that re-checks the day's photos with a vision-capable model endpoint (if the trial has one) and flags reports where it disagrees with Gemini. A good talking point, not essential
+
+Sketch of the worker call:
+
+```ts
+const prompt = `You are classifying a photo submitted to a city issue reporting app in Vancouver.
+Return only JSON: {"is_public_issue": boolean, "category": one of ${JSON.stringify(CATEGORIES)},
+"description": "one plain sentence", "severity": "low" | "medium" | "high"}`
+
+const res = await fetch(
+  `https://generativelanguage.googleapis.com/v1beta/models/${env.GEMINI_MODEL}:generateContent?key=${env.GEMINI_API_KEY}`,
+  {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [
+        { text: prompt },
+        { inline_data: { mime_type: file.type, data: base64Image } },
+      ] }],
+      generationConfig: { responseMimeType: 'application/json' },
+    }),
+  })
+```
+
+Handle:
+
+- **Privacy**: read the location first, then strip metadata before storing the photo. Tell people not to photograph faces or licence plates; blur them if there's time
+- **Junk photos**: if `is_public_issue` is false, ask the resident to retake
+- **Wrong guesses**: always editable, never auto-submitted
+- **Bad JSON**: validate, retry once, then fall back to the manual form
+
+Owner and effort: P3, about 2 to 3 hours, since the report form already exists.
+
+### 16.2 Smaller extras (after 16.1)
+
+- **Spoken neighbourhood briefings**: ElevenLabs reads the weekly summary aloud on the area page. Accessibility angle, about an hour
+- **Maritime desktop pre-fill**: the agent opens the City's web form in a Maritime Linux desktop and pre-fills it for the resident to review and send themselves
+- **Nightly photo re-check in Databricks** (see 16.1)
