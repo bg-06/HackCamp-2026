@@ -556,9 +556,3 @@ Everyone uses Freebuff.
 | Privacy | Never show withheld addresses; strip photo metadata on upload |
 
 ---
-
-## 15. Open questions for the team
-
-- Are we registered as a beginner team? If yes, also opt into Most Accessible Design and Best Problem-Solution Fit (more Tailscale chances)
-- Does anyone already have n8n Cloud, or do we self-host it in the Maritime box?
-- Who records the video, and when
