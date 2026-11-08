@@ -15,11 +15,12 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.icon-button.plain {
+/* Settings and sign-in/out next to the name: filled buttons that turn blue on hover, unless disabled */
+.profile-bar .icon-button {
   background: var(--surface-muted);
 }
-.icon-button.plain:hover,
-.icon-button.plain:focus-visible {
+.profile-bar .icon-button:not(:disabled):hover,
+.profile-bar .icon-button:focus-visible {
   color: var(--blue-dark);
   opacity: 1;
 }
@@ -72,7 +73,6 @@
   margin: 22px 0 18px;
   border: none;
   background: transparent;
-  box-shadow: none;
 }
 .page.place .stats > div {
   align-items: center;

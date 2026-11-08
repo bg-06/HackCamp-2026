@@ -1,8 +1,8 @@
 import { Auth0Provider, useAuth0, type AppState } from "@auth0/auth0-react";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { getDisplayName, saveDisplayName, setAccessTokenGetter, USE_MOCK } from "../api/client";
-import { AuthContext, publicName, type Auth } from "./auth";
+import { ApiError, getDisplayName, saveDisplayName, setAccessTokenGetter, USE_MOCK } from "../api/client";
+import { AuthContext, isValidName, publicName, tidyName, type Auth } from "./auth";
 
 const DOMAIN = import.meta.env.VITE_AUTH0_DOMAIN;
 const CLIENT_ID = import.meta.env.VITE_AUTH0_CLIENT_ID;
@@ -20,7 +20,12 @@ function MockAuth({ children }: { children: ReactNode }) {
       picture: null,
       login: () => setSignedIn(true),
       logout: () => setSignedIn(false),
-      rename: async (next: string) => setName(next.trim()),
+      // Same tidying and rule as the API, so mock mode shows the same errors.
+      rename: async (next: string) => {
+        const clean = tidyName(next);
+        if (!isValidName(clean)) throw new ApiError(400);
+        setName(clean);
+      },
       error: null,
     }),
     [signedIn, name],
@@ -47,26 +52,37 @@ function Auth0Bridge({ children }: { children: ReactNode }) {
   setAccessTokenGetter(isAuthenticated ? () => getAccessTokenSilently() : null);
 
   // The name people see. A name you chose in Settings wins; the Auth0 profile only seeds it the first time.
+  // The last saved name is kept per account in localStorage, so a reload doesn't flash the Auth0 name first.
   const [savedName, setSavedName] = useState<string | null>(null);
   const seedName = isAuthenticated ? publicName(user) : null;
+  const cacheKey = isAuthenticated && user?.sub ? `bbb-display-name:${user.sub}` : null;
+  const cachedName = useMemo(() => {
+    try { return cacheKey ? localStorage.getItem(cacheKey) : null; } catch { return null; }
+  }, [cacheKey]);
+  const keep = useCallback((next: string) => {
+    setSavedName(next);
+    try { if (cacheKey) localStorage.setItem(cacheKey, next); } catch { /* shown for this page only */ }
+  }, [cacheKey]);
+
+  // Settled once the first-sign-in load (and seed save) is done. rename waits on it so the seed can't land after a rename.
+  const loaded = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
     if (!isAuthenticated) { setSavedName(null); return; }
     let cancelled = false;
-    getDisplayName()
+    loaded.current = getDisplayName()
       .then(async (existing) => {
         if (cancelled) return;
-        if (existing) return setSavedName(existing);
-        if (seedName) { await saveDisplayName(seedName); if (!cancelled) setSavedName(seedName); }
+        if (existing) return keep(existing);
+        if (seedName) { const saved = await saveDisplayName(seedName); if (!cancelled) keep(saved); }
       })
       .catch(() => {}); // comments fall back to "Neighbour"
     return () => { cancelled = true; };
-  }, [isAuthenticated, seedName]);
+  }, [isAuthenticated, seedName, keep]);
 
   const rename = useCallback(async (next: string) => {
-    const clean = next.replace(/\s+/g, " ").trim();
-    await saveDisplayName(clean);
-    setSavedName(clean);
-  }, []);
+    await loaded.current;
+    keep(await saveDisplayName(next)); // the API tidies the name and sends back what it stored
+  }, [keep]);
 
   const login = useCallback(() => {
     // Come back to the page they were on. What they tapped isn't replayed, since the page reloads.
@@ -81,14 +97,15 @@ function Auth0Bridge({ children }: { children: ReactNode }) {
     () => ({
       ready: !isLoading,
       signedIn: isAuthenticated,
-      name: savedName ?? seedName ?? user?.name ?? user?.nickname ?? null,
+      // Never the raw Auth0 name: for email sign-ins that's the email address, which publicName leaves out.
+      name: savedName ?? cachedName ?? seedName,
       picture: user?.picture ?? null,
       login,
       logout: signOut,
       rename,
       error: error?.message ?? null,
     }),
-    [isLoading, isAuthenticated, user, savedName, seedName, login, signOut, rename, error],
+    [isLoading, isAuthenticated, user, savedName, cachedName, seedName, login, signOut, rename, error],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
