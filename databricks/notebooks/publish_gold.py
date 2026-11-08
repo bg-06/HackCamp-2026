@@ -19,7 +19,6 @@
 
 import csv
 import io
-import pathlib
 import re
 import ssl
 
@@ -27,7 +26,7 @@ import pg8000.native
 
 spark.conf.set("spark.sql.session.timeZone", "UTC")  # naive datetimes below are UTC / local as noted in DDL
 
-# Postgres table -> query. Column order must match databricks/postgres/gold_tables.sql.
+# Postgres table -> query. Tables are owned by app/db/migrations/003_gold_tables.sql.
 TABLES = {
     "gold_type_categories": """
         SELECT t.request_type, t.category, coalesce(o.track, t.ai_track) AS track
@@ -50,8 +49,6 @@ TABLES = {
 # These may legitimately be empty (no finished events yet); the rest being empty means something broke.
 ALLOW_EMPTY = {"gold_event_impact"}
 
-DDL_PATH = pathlib.Path.cwd().parent / "postgres" / "gold_tables.sql"
-
 
 def secret(key):
     return dbutils.secrets.get("bbb", key)
@@ -61,10 +58,17 @@ def source_exists(query):
     return all(spark.catalog.tableExists(t) for t in re.findall(r"FROM\s+(bbb\.gold\.\w+)", query))
 
 
-def ddl_statements(text):
-    """Split a SQL file into statements. Strips -- comments first (they can contain ';')."""
-    code = re.sub(r"--[^\n]*", "", text)
-    return [s.strip() for s in code.split(";") if s.strip()]
+def validate_targets(conn):
+    """Check every destination before publishing; migrations own schema creation."""
+    missing = [
+        table for table in [*TABLES, "gold_published"]
+        if conn.run("SELECT to_regclass(:table)", table=table)[0][0] is None
+    ]
+    if missing:
+        raise RuntimeError(
+            "Missing Postgres publish tables: " + ", ".join(missing)
+            + ". Apply app/db/migrations with npm --prefix app run db:migrate before publishing."
+        )
 
 
 def to_csv(rows):
@@ -95,14 +99,7 @@ published, skipped = {}, {}
 try:
     conn.run("SET TimeZone = 'UTC'")
 
-    conn.run("BEGIN")
-    try:
-        for stmt in ddl_statements(DDL_PATH.read_text()):
-            conn.run(stmt)
-        conn.run("COMMIT")
-    except Exception:
-        conn.run("ROLLBACK")
-        raise
+    validate_targets(conn)
 
     for table, query in TABLES.items():
         if not source_exists(query):

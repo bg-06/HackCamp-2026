@@ -2,18 +2,14 @@ import { createHash } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { config } from 'dotenv'
+import { allRecords, apiJson, recordPage, VANCOUVER_API_ROOT, type JsonObject } from '../lib/opendatasoft.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 config({ path: join(here, '../../../.env') })
 const { sql } = await import('../lib/db.js')
 
-type JsonPrimitive = string | number | boolean | null
-type JsonValue = JsonPrimitive | JsonObject | JsonValue[]
-type JsonObject = { [key: string]: JsonValue }
-type ApiPage = { total_count: number; results: JsonObject[] }
 type DatasetMetadata = { metas?: { default?: { data_processed?: string } } }
 
-const API_ROOT = 'https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets'
 const DATASET_311 = '3-1-1-service-requests'
 const PAGE_SIZE = 100
 
@@ -37,51 +33,9 @@ function hash(...values: unknown[]): string {
   return createHash('sha256').update(values.map(canonical).join('|')).digest('hex')
 }
 
-async function apiJson<T>(
-  url: string,
-  params: Record<string, string | number> = {},
-  timeoutMs = 120_000,
-): Promise<T> {
-  const target = new URL(url)
-  for (const [key, value] of Object.entries(params)) target.searchParams.set(key, String(value))
-
-  let lastError: unknown
-  for (let attempt = 0; attempt < 4; attempt++) {
-    try {
-      const response = await fetch(target, {
-        headers: { 'user-agent': 'BlockByBlock-Ingest/1.0' },
-        signal: AbortSignal.timeout(timeoutMs),
-      })
-      if (!response.ok) throw new Error(`${response.status} ${response.statusText}: ${target}`)
-      return (await response.json()) as T
-    } catch (error) {
-      lastError = error
-      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 2 ** attempt * 1_000))
-    }
-  }
-  throw lastError
-}
-
-async function recordPage(datasetId: string, offset: number, where?: string): Promise<ApiPage> {
-  return apiJson<ApiPage>(`${API_ROOT}/${datasetId}/records`, {
-    limit: PAGE_SIZE,
-    offset,
-    ...(where ? { where } : {}),
-  })
-}
-
-async function allRecords(datasetId: string, where?: string): Promise<JsonObject[]> {
-  const output: JsonObject[] = []
-  for (let offset = 0; ; offset += PAGE_SIZE) {
-    const page = await recordPage(datasetId, offset, where)
-    output.push(...page.results)
-    if (!page.results.length || output.length >= page.total_count) return output
-  }
-}
-
 
 async function sourceProcessedAt(datasetId: string): Promise<string | null> {
-  const metadata = await apiJson<DatasetMetadata>(`${API_ROOT}/${datasetId}`)
+  const metadata = await apiJson<DatasetMetadata>(`${VANCOUVER_API_ROOT}/${datasetId}`)
   return metadata.metas?.default?.data_processed ?? null
 }
 

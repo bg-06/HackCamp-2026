@@ -1,5 +1,5 @@
 -- Postgres tables that publish_gold fills from bbb.gold (Databricks -> Postgres).
--- publish_gold.py runs this before every publish, so it is all IF NOT EXISTS.
+-- This migration owns creation; publish_gold.py checks the tables exist and only publishes data.
 -- The app reads these; it never writes them. Column order must match TABLES in publish_gold.py.
 
 CREATE TABLE IF NOT EXISTS gold_type_categories (

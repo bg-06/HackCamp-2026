@@ -46,7 +46,8 @@ resources:
       schedule:
         quartz_cron_expression: "0 0 6 * * ?"   # 06:00 Vancouver, after the portal's nightly refresh
         timezone_id: America/Vancouver
-        # The dev target (mode: development) forces PAUSED on every deploy; after `databricks bundle deploy` unpause with:
+        # Dev defaults to PAUSED, but explicit UNPAUSED overrides it in the current CLI.
+        # Verify after deployment. If paused, restore with:
         # databricks jobs update --json '{"job_id": <bbb_daily job id>, "new_settings": {"schedule": {"quartz_cron_expression": "0 0 6 * * ?", "timezone_id": "America/Vancouver", "pause_status": "UNPAUSED"}}}'
         pause_status: UNPAUSED
       max_concurrent_runs: 1
@@ -78,9 +79,15 @@ resources:
           notebook_task:
             notebook_path: ./notebooks/publish_gold.py
 
-    # Fast path for n8n (event marked done, votes changed) and nightly: no pipeline run.
+    # Native app-data refresh: completed events and votes reach gold within 15 minutes
+    # plus runtime. No full 311 pipeline run and no n8n dependency.
     bbb_refresh_rankings:
       name: bbb_refresh_rankings
+      schedule:
+        quartz_cron_expression: "0 0/15 * * * ?"
+        timezone_id: America/Vancouver
+        # Explicit UNPAUSED overrides the dev default. Verify both schedules after deployment.
+        pause_status: UNPAUSED
       max_concurrent_runs: 1
       tasks:
         - task_key: refresh_rankings
