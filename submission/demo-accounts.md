@@ -13,8 +13,8 @@ As reviewed on November 8, 2026, `docs/auth0-backend.md` documents Auth0 residen
 | Demo persona | Account alias, not an email | Required setup | Readiness |
 | --- | --- | --- | --- |
 | Resident | bbb-demo-resident | Real login through the configured Auth0 SPA; verified API token | Code present; live login and actions unverified |
-| Organization admin | bbb-demo-org-admin | Separate Auth0 user; approved organization membership plus implemented server authorization | Blocked on role integration |
-| Moderator | bbb-demo-moderator | Separate Auth0 user; implemented and enforced moderation permission | Blocked on role integration |
+| Organization admin | bbb-demo-org-admin | Separate Auth0 user; approved `org_members` row (role `admin`), granted by a moderator through `PUT /moderation/organizations/:orgId/members/:memberId`; then `/me/organizations`, `/me/suggestions` and the Agent page work | Code present on main; needs a moderator-approved membership and a live login check |
+| Moderator | bbb-demo-moderator | Separate Auth0 user whose access token carries the `moderate:organizations` permission (Auth0 API RBAC role, with permissions added to the access token) | Server check present on main; Auth0 role must be created and assigned by the tenant owner |
 | Second resident for isolation checks | bbb-demo-resident-2 | Different Auth0 subject from the first resident | To create and verify |
 
 Do not present differently named resident accounts as working admin/moderator roles.

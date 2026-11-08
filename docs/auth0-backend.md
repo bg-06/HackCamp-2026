@@ -23,7 +23,7 @@ the existing text user IDs store verified Auth0 `sub` values.
 - Client-credentials / `@clients` machine tokens are accepted only on `/agent/*`, and only with
   the route's scope (`suggestions:post`, `briefings:post`). Everywhere else they get 403, even on
   public reads, and resident tokens get 403 on `/agent/*`. Machines never gain a resident identity.
-  Org-admin/moderator roles are not implemented yet.
+  Org admin is an approved `org_members` row; moderator is the `moderate:organizations` permission in the access token (Auth0 RBAC, set up by the tenant owner).
 - No route returns an Auth0 user id. Comments and hosted events show the `profiles` display name
   the frontend saves after sign-in (first name + last initial), or "Neighbour" / "A neighbour".
 - Key-service failures return 503 and fail closed. Tokens are not printed or returned
