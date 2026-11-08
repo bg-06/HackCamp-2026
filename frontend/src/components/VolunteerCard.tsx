@@ -1,5 +1,5 @@
 import { KIND_LABELS } from '../data/categories'
-import { requestTypeInSentence } from '../lib/cover'
+import { describeReports, hotspotKind } from '../lib/hotspots'
 import type { VolunteerEvent } from '../types'
 
 const TZ = 'America/Vancouver'
@@ -43,8 +43,7 @@ export default function VolunteerCard({ event }: { event: VolunteerEvent }) {
 
       {event.hotspot && (
         <p className="why-here">
-          {requestTypeInSentence(event.hotspot.requestType)} has been reported here {event.hotspot.timesReported} times in the last{' '}
-          {event.hotspot.monthsSeen} months.
+          {hotspotKind(event.hotspot.requestType).label} here: {describeReports(event.hotspot.timesReported, Math.min(12, event.hotspot.monthsSeen))}.
         </p>
       )}
 

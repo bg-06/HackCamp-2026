@@ -6,13 +6,13 @@ the older partial-load Track 1 count in `docs/databricks-run-notes.md`.
 ## Current Track 1 labels
 
 The effective track (`coalesce(track_overrides.track, type_categories.ai_track)`)
-contains six request types. All six currently come from frozen AI labels, with no
+contained six request types at review time (five after the 2026-11-08 override below). All six currently come from frozen AI labels, with no
 override on these specific rows. Other manual overrides still exclude bulky dumping,
 feces, external/private-property graffiti and inquiries.
 
 | Request type | Cases in current enriched data | Opened in last 12 months | Review |
 |---|---:|---:|---|
-| Abandoned Non-Recyclables-Small Case | 43,753 | 8,658 | Retain for small-item/litter cleanup opportunities |
+| Abandoned Non-Recyclables-Small Case | 43,753 | 8,658 | **Moved to `city` on 2026-11-08** (override): it filled the top of Track 1 with Downtown Eastside dumping that needs a City pickup and can include belongings of people living outside |
 | Abandoned Recyclables Case | 18,079 | 4,073 | Retain for small-item/litter cleanup opportunities |
 | Graffiti Removal - City Property Case | 11,565 | 2,780 | Retain only as a reporting/survey opportunity; no automatic paint-out |
 | Street Cleaning and Debris Pick Up Case | 10,365 | 2,313 | Broad label: offer litter pickup, leave City service work to City crews |

@@ -64,9 +64,9 @@ Suggestion, `POST {AGENT_API_BASE_URL}/agent/suggestions`. `AGENT_API_BASE_URL` 
 - Suggestions are for org admins of the `org_ids` listed (or of the area, see above): accept opens Create event prefilled from `event_draft`; dismiss hides it and sets `status = 'dismissed'`.
 - **Events and coverage.** A hotspot counts as covered by an upcoming event (next 14 days, `done_at` null) when the event's cell matches, or when the event has no cell and no coordinates but has the same `local_area` and `category`. Please set `h3_r9` (and `latitude` / `longitude`) when an event is created, because the Databricks rankings read `events.h3_r9` too.
 
-## Run on a Maritime Agent Box
+## Run it
 
-Install requirements, set the env vars as the box's secrets (`POSTGRES_*`, `AGENT_SINK=http`, `AGENT_API_BASE_URL`, `AUTH0_*`, `GEMINI_API_KEY`), and start `python -m block_steward loop` from `agent/`. The endpoints are live on the API (`POST /agent/suggestions`, `POST /agent/briefings`); use `AGENT_SINK=dry-run` to test without sending.
+Install requirements, set the env vars as secrets on the host (`POSTGRES_*`, `AGENT_SINK=http`, `AGENT_API_BASE_URL`, `AUTH0_*`, `GEMINI_API_KEY`), and start `python -m block_steward loop` from `agent/`. The endpoints are live on the API (`POST /agent/suggestions`, `POST /agent/briefings`); use `AGENT_SINK=dry-run` to test without sending.
 
 Run `python -m block_steward run-once` right after deploying. Briefings only run Mondays at 08:00, and a restart after 08:00 on a Monday skips that week.
 

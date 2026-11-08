@@ -346,7 +346,7 @@ Plan.md section 7 has the later Auth0 work: roles (`org_admin`, `moderator`) and
 
 ---
 
-## Step 13: Block Steward agent (Maritime and Gemini prizes)
+## Step 13: Block Steward agent (Gemini prize)
 
 - **Who:** agent owner. Plan.md section 8 has the details.
 - **Before you start:** step 11 parts 1–2 are done. Auth0 machine-to-machine app `block-steward-agent` with scopes `briefings:post` and `suggestions:post` is created (plan.md section 7).
@@ -354,7 +354,7 @@ Plan.md section 7 has the later Auth0 work: roles (`org_admin`, `moderator`) and
   1. Daily: read `gold_help_hotspots` and upcoming `events` from Postgres (read-only). For hotspots with no event in the same `h3_r9` in the next 14 days, write a suggestion for the nearest orgs.
   2. Weekly: write a short "ways to help this week" briefing per area using Gemini, from `gold_area_summaries`, upcoming events and the top Track 2 issues.
   3. Post both through new API endpoints `POST /agent/suggestions` and `POST /agent/briefings`, which insert into `posts` and require an Auth0 machine token with the matching scope.
-- **Check:** record a 30-second clip: the agent finds a hotspot with nothing planned and posts a suggestion that an org admin accepts.
+- **Check:** run it once: the agent finds a hotspot with nothing planned and posts a suggestion that an org admin can accept.
 
 ---
 
