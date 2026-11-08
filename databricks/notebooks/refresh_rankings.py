@@ -6,6 +6,9 @@
 import pathlib
 import re
 
+# Postgres done_at is an instant; compare it with explicitly UTC-converted case timestamps.
+spark.conf.set("spark.sql.session.timeZone", "UTC")
+
 SQL_FILE = pathlib.Path.cwd().parent / "sql" / "rankings.sql"
 
 statements = [s.strip() for s in SQL_FILE.read_text().split(";") if s.strip()]

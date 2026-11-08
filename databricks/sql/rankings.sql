@@ -21,11 +21,14 @@ FROM (
 -- @requires bbb_app.public.events
 -- Did it work? 311 reports of the event's category in its cell + ring, 60 days before vs after done_at.
 -- Postgres events: id, h3_r9 text (res 9), category text, done_at timestamptz.
+-- opened_at is a Vancouver wall-clock timestamp. Convert it back to UTC before comparing instants.
 CREATE OR REPLACE TABLE bbb.gold.event_impact
 COMMENT '311 reports near each finished event, 60 days before vs after'
 AS SELECT CAST(e.id AS STRING) AS event_id, e.h3_r9, e.category, e.done_at,
-       count_if(c.opened_at >= e.done_at - INTERVAL 60 DAYS AND c.opened_at < e.done_at) AS reports_60d_before,
-       count_if(c.opened_at >= e.done_at AND c.opened_at < e.done_at + INTERVAL 60 DAYS) AS reports_60d_after,
+       count_if(to_utc_timestamp(c.opened_at, 'America/Vancouver') >= e.done_at - INTERVAL 60 DAYS
+                AND to_utc_timestamp(c.opened_at, 'America/Vancouver') < e.done_at) AS reports_60d_before,
+       count_if(to_utc_timestamp(c.opened_at, 'America/Vancouver') >= e.done_at
+                AND to_utc_timestamp(c.opened_at, 'America/Vancouver') < e.done_at + INTERVAL 60 DAYS) AS reports_60d_after,
        datediff(current_date(), e.done_at) AS days_since_done
 FROM bbb_app.public.events e
 LEFT JOIN bbb.gold.cases_enriched c
