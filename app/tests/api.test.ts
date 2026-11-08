@@ -160,18 +160,18 @@ test('future events cannot be completed and do not generate volunteer hours', as
   assert.deepEqual((await request('/me/history')).body, [])
 })
 
-test('upvotes enforce two casts per day, retain spent allowance after removal, and make repeats idempotent', async () => {
+test('upvotes enforce two active votes, refund removal, and make repeats idempotent', async () => {
   assert.equal((await request('/me/votes')).body.votesRemaining, 2)
   assert.equal((await request('/issues/issue-1/vote', 'PUT', { value: -1 })).status, 400)
   assert.equal((await request('/issues/issue-1/vote', 'PUT', { value: 1 })).body.votesRemaining, 1)
   assert.equal((await request('/issues/issue-1/vote', 'PUT', { value: 1 })).body.votesRemaining, 1)
-  assert.equal((await request('/issues/issue-1/vote', 'DELETE')).body.votesRemaining, 1)
-  assert.equal((await request('/issues/issue-1/vote', 'PUT', { value: 1 })).body.votesRemaining, 0)
-  const denied = await request('/issues/issue-2/vote', 'PUT', { value: 1 })
+  assert.equal((await request('/issues/issue-1/vote', 'DELETE')).body.votesRemaining, 2)
+  assert.equal((await request('/issues/issue-1/vote', 'PUT', { value: 1 })).body.votesRemaining, 1)
+  assert.equal((await request('/issues/issue-2/vote', 'PUT', { value: 1 })).body.votesRemaining, 0)
+  const denied = await request('/issues/issue-3/vote', 'PUT', { value: 1 })
   assert.equal(denied.status, 429)
-  assert.equal(denied.body.code, 'DAILY_VOTE_LIMIT')
+  assert.equal(denied.body.code, 'VOTE_LIMIT')
   assert.equal(denied.body.votesRemaining, 0)
-  assert.equal((await sql`SELECT count(*)::int AS n FROM vote_casts`)[0]!.n, 2)
   assert.equal((await request('/me/votes', 'GET', undefined, 'bob')).body.votesRemaining, 2)
 })
 
@@ -184,7 +184,7 @@ test('parallel attempts cannot exceed the daily allowance', async () => {
 test('parallel repeats of the same vote spend only one allowance', async () => {
   const responses = await Promise.all([1, 2].map(() => request('/issues/issue-1/vote', 'PUT', { value: 1 })))
   assert.ok(responses.every(r => r.status === 200 && r.body.votesRemaining === 1))
-  assert.equal((await sql`SELECT count(*)::int AS n FROM vote_casts`)[0]!.n, 1)
+  assert.equal((await sql`SELECT count(*)::int AS n FROM votes WHERE user_id = 'alice' AND value = 1`)[0]!.n, 1)
 })
 
 test('event capacity remains bounded under parallel RSVPs', async () => {
@@ -222,8 +222,18 @@ test('budget migration backfills existing upvotes and remains safe to replay wit
   assert.equal((await request('/me/votes', 'GET', undefined, 'bob')).body.votesRemaining, 2)
   await request('/issues/issue-1/vote', 'DELETE')
   await sql.unsafe(migration)
-  assert.equal((await request('/me/votes')).body.votesRemaining, 0)
+  assert.equal((await request('/me/votes')).body.votesRemaining, 1)
   assert.equal((await sql`SELECT count(*)::int AS n FROM vote_casts`)[0]!.n, 2)
+})
+
+test('swap atomically replaces a vote and rejects stale selections', async () => {
+  await request('/issues/issue-1/vote', 'PUT', { value: 1 })
+  await request('/issues/issue-2/vote', 'PUT', { value: 1 })
+  const body = { removeIssueId: 'issue-1', expectedIssueIds: ['issue-1', 'issue-2'] }
+  assert.equal((await request('/issues/issue-3/vote/swap', 'POST', body)).status, 200)
+  assert.equal((await request('/issues/issue-3/vote/swap', 'POST', body)).status, 409)
+  const votes = await sql`SELECT issue_id FROM votes WHERE user_id = 'alice' AND value = 1 ORDER BY issue_id`
+  assert.deepEqual(votes.map(v => v.issue_id), ['issue-2', 'issue-3'])
 })
 
 test('comments and hosted events show display names, never Auth0 ids', async () => {

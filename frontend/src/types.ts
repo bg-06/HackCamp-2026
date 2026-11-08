@@ -55,6 +55,7 @@ export interface Track2Issue {
   popularity?: number // how many people searched for or opened it
   photo_url?: string // a resident's photo of it; 311 data has none
   comment_count?: number
+  recent_activity?: number // active votes and visible comments from the past seven days
 }
 
 /** Track 1 spot that keeps getting reported, from gold_help_hotspots. Can be turned into an event. */
@@ -91,13 +92,11 @@ export interface NewEvent {
 
 export type Vote = 0 | 1 // up votes only
 
-// Each person gets 2 new votes per Vancouver day. Taking one back doesn't give it back.
+// Each person can hold two active votes.
 export interface VoteBudget {
-  dailyLimit: number
+  limit: number
   votesUsed: number
   votesRemaining: number
-  voteDate: string // YYYY-MM-DD in Vancouver
-  resetsAt: string
 }
 
 // Home sort options. "longest" (open the longest) is Issues only.

@@ -51,6 +51,9 @@ export default function HomePage() {
     requireSignIn,
   } = useFeed();
   const [sortOpen, setSortOpen] = useState(false);
+  const [area, setArea] = useState(() => localStorage.getItem('issue-area') ?? '');
+  const [category, setCategory] = useState('');
+  const [myVotesOnly, setMyVotesOnly] = useState(false);
   const [showAllHotspots, setShowAllHotspots] = useState(false);
   const contentRef = useRef<HTMLElement>(null);
 
@@ -72,18 +75,20 @@ export default function HomePage() {
     issueSort,
     issueQ,
     here ? `${here.lat},${here.lng}` : "",
+    area, category, String(myVotesOnly),
+    myVotesOnly ? (issues.items ?? []).filter(i => i.my_vote === 1).map(i => i.issue_id).join() : '',
     events.items ? "events" : "",
     (issues.items ?? []).map((i) => i.issue_id).join(),
   ].join("|");
   const [issueOrder, setIssueOrder] = useState<{ key: string; ids: string[]; rank: Map<string, number> } | null>(null);
   if (issues.items && issueOrder?.key !== orderKey) {
     const matching = issues.items.filter(
-      (i) => !issueQ || `${i.request_type} ${i.address ?? ""} ${i.local_area}`.toLowerCase().includes(issueQ),
+      (i) => (!issueQ || `${i.request_type} ${i.address ?? ""} ${i.local_area}`.toLowerCase().includes(issueQ)) && (!area || i.local_area === area) && (!category || i.category === category) && (!myVotesOnly || i.my_vote === 1),
     );
     const byScore = [...issues.items].sort((a, b) => issueScore(b).score - issueScore(a).score);
     setIssueOrder({
       key: orderKey,
-      ids: sortIssues(matching, issueSort, ctx).map((i) => i.issue_id),
+      ids: sortIssues(matching, issueSort, ctx).sort((a, b) => issueSort === 'recommended' && here && !area ? Number((distanceTo(here, a) ?? Infinity) > 3) - Number((distanceTo(here, b) ?? Infinity) > 3) : 0).map((i) => i.issue_id),
       rank: new Map(byScore.map((i, n) => [i.issue_id, n + 1])),
     });
   }
@@ -205,6 +210,18 @@ export default function HomePage() {
           </button>
         </div>
 
+        {tab === 'issues' && <div className="filter-row">
+          <label>Neighbourhood <select value={area} onChange={e => { setArea(e.target.value); localStorage.setItem('issue-area', e.target.value) }}>
+            <option value="">All Vancouver</option>
+            {[...new Set((issues.items ?? []).map(i => i.local_area).filter(Boolean))].sort().map(a => <option key={a} value={a}>{a}</option>)}
+          </select></label>
+          <label>Category <select value={category} onChange={e => setCategory(e.target.value)}>
+            <option value="">All categories</option>
+            {[...new Set((issues.items ?? []).map(i => i.category).filter(Boolean))].sort().map(c => <option key={c} value={c}>{c}</option>)}
+          </select></label>
+          <button className={`filter-chip ${myVotesOnly ? 'selected' : ''}`} aria-pressed={myVotesOnly} onClick={() => setMyVotesOnly(!myVotesOnly)}>My votes</button>
+        </div>}
+
         {sortOpen && (
           <div className="filter-row" role="group" aria-label="Sort by">
             {sorts.map((s) => (
@@ -271,6 +288,7 @@ export default function HomePage() {
               {issues.items && ` ${totalVotes} ${totalVotes === 1 ? "vote" : "votes"} so far.`}
             </p>
             <VotesLeft />
+            <p className="muted small">Choose a neighbourhood or turn on Near me. For you uses your votes and volunteer interests; Recent activity counts votes and comments from the past 7 days.</p>
             <p className="muted small">The number is a priority score: votes, plus how long it's been open and how often it's reported.</p>
             <a className="text-link" href={VAN311_URL} target="_blank" rel="noopener noreferrer">
               Report something new in Van311 ↗

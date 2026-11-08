@@ -94,7 +94,7 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
   type IssueRow = {
     issue_id: string; h3_r9: string; request_type: string; category: string | null; local_area: string | null
     address: string | null; open_cases: number; days_open: number; times_reported_12m: number; base_score: number
-    up_votes: number; down_votes: number; my_vote: number; score: number; comment_count: number
+    up_votes: number; down_votes: number; my_vote: number; score: number; comment_count: number; recent_activity: number
   }
 
   // up_votes / down_votes leave out the caller's own vote; that is my_vote (see types.ts).
@@ -106,6 +106,8 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
              0::int AS down_votes,
              coalesce(max(v.value) FILTER (WHERE v.user_id = ${user} AND v.value = 1), 0)::int AS my_vote,
              coalesce(i.base_score, 0)::float8 + 3 * count(*) FILTER (WHERE v.value = 1) AS score,
+             (count(*) FILTER (WHERE v.value = 1 AND v.created_at >= now() - interval '7 days') +
+              (SELECT count(*) FROM comments c WHERE c.issue_id = i.issue_id AND NOT c.hidden AND c.created_at >= now() - interval '7 days'))::int AS recent_activity,
              (SELECT count(*)::int FROM comments c WHERE c.issue_id = i.issue_id AND NOT c.hidden) AS comment_count
       FROM gold_track2_issues i
       LEFT JOIN votes v ON v.issue_id = i.issue_id
@@ -132,6 +134,7 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
       my_vote: r.my_vote,
       score: r.score,
       comment_count: r.comment_count,
+      recent_activity: r.recent_activity,
       ...centre(r.h3_r9),
     }
   }
@@ -158,24 +161,17 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
   app.use(authentication)
   app.use(express.json())
 
-  type BudgetRow = { vote_day: string; votes_used: number; resets_at: Date }
   async function voteBudget(user: string, db: Sql | TransactionSql = sql) {
-    const [row] = await db<BudgetRow[]>`
-      SELECT (current_timestamp AT TIME ZONE 'America/Vancouver')::date::text AS vote_day,
-             coalesce((SELECT votes_used FROM vote_daily_usage WHERE user_id = ${user}
-               AND vote_day = (current_timestamp AT TIME ZONE 'America/Vancouver')::date), 0)::int AS votes_used,
-             (((current_timestamp AT TIME ZONE 'America/Vancouver')::date + 1)::timestamp
-               AT TIME ZONE 'America/Vancouver') AS resets_at`
-    return { dailyLimit: 2, votesUsed: row!.votes_used, votesRemaining: Math.max(0, 2 - row!.votes_used),
-             voteDate: row!.vote_day, resetsAt: row!.resets_at.toISOString() }
+    const [row] = await db<{ votes_used: number }[]>`SELECT count(*)::int AS votes_used FROM votes v JOIN gold_track2_issues i ON i.issue_id = v.issue_id WHERE v.user_id = ${user} AND v.value = 1`
+    return { limit: 2, votesUsed: row!.votes_used, votesRemaining: Math.max(0, 2 - row!.votes_used) }
   }
 
   async function lockVoteDay(user: string, tx: TransactionSql) {
     await tx`INSERT INTO vote_daily_usage (user_id, vote_day, votes_used)
-             VALUES (${user}, (current_timestamp AT TIME ZONE 'America/Vancouver')::date, 0)
+             VALUES (${user}, '1970-01-01', 0)
              ON CONFLICT (user_id, vote_day) DO NOTHING`
     await tx`SELECT votes_used FROM vote_daily_usage WHERE user_id = ${user}
-             AND vote_day = (current_timestamp AT TIME ZONE 'America/Vancouver')::date FOR UPDATE`
+             AND vote_day = '1970-01-01' FOR UPDATE`
   }
 
   // The name shown on your comments and the events you host. The frontend sets it from your Auth0
@@ -407,14 +403,11 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
       await lockVoteDay(user, tx)
       const [existing] = await tx`SELECT value FROM votes WHERE issue_id = ${req.params.id} AND user_id = ${user}`
       if (existing?.value === 1) return voteBudget(user, tx)
-      const updated = await tx`UPDATE vote_daily_usage SET votes_used = votes_used + 1
-        WHERE user_id = ${user} AND vote_day = (current_timestamp AT TIME ZONE 'America/Vancouver')::date
-          AND votes_used < 2 RETURNING votes_used`
-      if (!updated.length) throw new ApiError(429, 'Daily vote limit reached',
-        { code: 'DAILY_VOTE_LIMIT', ...await voteBudget(user, tx) })
+      const current = await voteBudget(user, tx)
+      if (!current.votesRemaining) throw new ApiError(429, 'Active vote limit reached',
+        { code: 'VOTE_LIMIT', ...current })
       await tx`INSERT INTO votes (issue_id, user_id, value, created_at) VALUES (${req.params.id}, ${user}, 1, now())
         ON CONFLICT (issue_id, user_id) DO UPDATE SET value = 1, created_at = EXCLUDED.created_at`
-      await tx`INSERT INTO vote_casts (user_id, issue_id) VALUES (${user}, ${req.params.id})`
       return voteBudget(user, tx)
     })
     res.json({ ...budget, myVote: 1 })
@@ -428,6 +421,27 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
       return voteBudget(user, tx)
     })
     res.json({ ...budget, myVote: 0 })
+  })
+
+  app.post('/issues/:id/vote/swap', async (req, res) => {
+    const user = userId(req)
+    const removeId = req.body?.removeIssueId
+    const expected = req.body?.expectedIssueIds
+    if (typeof removeId !== 'string' || !Array.isArray(expected) || expected.length !== 2 || !expected.every((x: unknown) => typeof x === 'string') || new Set(expected).size !== 2 || !expected.includes(removeId) || removeId === req.params.id)
+      throw new ApiError(400, 'Invalid vote selection')
+    const budget = await sql.begin(async tx => {
+      await lockVoteDay(user, tx)
+      const active = await tx<{ issue_id: string }[]>`SELECT v.issue_id FROM votes v JOIN gold_track2_issues i ON i.issue_id = v.issue_id WHERE v.user_id = ${user} AND v.value = 1`
+      if (active.length !== 2 || active.some(v => !expected.includes(v.issue_id)) || active.some(v => v.issue_id === req.params.id))
+        throw new ApiError(409, 'Your votes changed. Refresh and try again.')
+      const found = await tx`SELECT 1 FROM gold_track2_issues WHERE issue_id = ${req.params.id}`
+      if (!found.length) throw new ApiError(404, 'Issue not found')
+      await tx`DELETE FROM votes WHERE issue_id = ${removeId} AND user_id = ${user} AND value = 1`
+      await tx`INSERT INTO votes (issue_id, user_id, value, created_at) VALUES (${req.params.id}, ${user}, 1, now())
+        ON CONFLICT (issue_id, user_id) DO UPDATE SET value = 1, created_at = EXCLUDED.created_at`
+      return voteBudget(user, tx)
+    })
+    res.json(budget)
   })
 
   // Comments, oldest first. Issue comments need migration 004_issue_comments.sql.

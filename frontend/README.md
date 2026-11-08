@@ -3,7 +3,7 @@
 React + TypeScript + Vite. Mobile-first. Three tabs in the bottom nav:
 
 - **Volunteer** (`/`, green, Track 1): ways to help, run by the City, local groups and neighbours
-- **Issues** (`/issues`, deep blue, Track 2): City-only issues, up votes only (2 new votes a day), with "Send the top 5 to Council"
+- **Issues** (`/issues`, deep blue, Track 2): City-only issues, upvotes on up to two open issues, with "Send the top 5 to Council"
 - **Profile** (`/me`, charcoal): what you signed up for, your votes, your volunteer hours and a CSV download of them
 
 Volunteer is a two-column, photo-first feed, with a **Needs help** list above it: spots that keep getting
@@ -12,7 +12,27 @@ Issues is a plain list, one row each, with the vote on the right. Its order stay
 row doesn't jump away; it re-sorts when you come back.
 
 Under each title: **Near me** (turns on location, for distances and "Nearest") and **Sort: …**
-(For you / Newest / Popular / Nearest, plus Longest unsolved on Issues). Only Vancouver has data so far.
+(For you / Newest / Popular / Nearest; Issues uses Recent activity in place of Popular and also offers Longest unsolved). Only Vancouver has data so far.
+
+## Issue discovery and voting
+
+The Issues UI must help residents find relevant issues without reviewing the whole city list:
+
+- Offer a neighbourhood selector, category filter, search, and a **My votes** filter. Neighbourhood selection is saved in the browser; All Vancouver restores the citywide list.
+- **Near me** requests location only when the resident selects it. With a location and no neighbourhood selected, the default **For you** order places issues within 3 km ahead of more distant issues. Otherwise residents can browse citywide or select a neighbourhood without sharing location.
+- **For you** uses categories of the resident's active votes and volunteer sign-ups, then recent activity and the issue priority score. **Recent activity** sorts by active votes and visible comments from the last seven days, followed by priority score. Explain these signals in the UI; do not describe total all-time votes as trending.
+- Keep the list order stable while someone votes so rows do not jump under their finger. Filtering and changing the sort can reorder the list. Display the priority score as a combination of votes and City reporting data, rather than as a vote count.
+
+A signed-in resident can prioritize two open issues at a time. Show the number of available slots, make clear that votes can be changed, and allow a selected vote to be removed to free a slot. There is no daily reset. Votes on issues no longer in the open issue feed do not consume an available slot.
+
+When both slots are used, the vote control for a third issue must remain actionable and open a comparison dialog:
+
+1. Explain the two-vote limit and ask which of the two currently selected issues is more pressing.
+2. Compare the issue not chosen in the first question with the newly selected issue. Suggest removing the issue not chosen in this second question.
+3. Show all three issues and let the resident change which one to remove, or choose directly without comparisons. If the new issue is removed, confirmation retains the original two votes. Cancel or Escape leaves votes unchanged.
+4. On confirmation of a replacement, send one atomic swap request. If the server reports that votes have changed, or the request fails, do not claim success; refresh the issue data and let the resident review again.
+
+The dialog should identify each issue by type and address or neighbourhood, use accessible dialog and button labels, and restore focus when closed. Both the feed and issue details use the same vote action. In sample mode, the flow follows the same two-active-vote rule.
 
 Tapping a card opens its page, `/volunteer/:id` or `/issues/:id`: the details, **Where** (a small map and a
 Directions link) and the **Discussion**. The one action (sign up, or vote) is pinned to the bottom.
@@ -48,7 +68,8 @@ src/
   components/MasonryFeed.tsx   two-column feed
   components/EventTile.tsx     a volunteer card in the feed
   components/IssueRow.tsx      one issue in the list, with the vote beside it
-  components/VoteControl.tsx   ▲ score ▼
+  components/VoteControl.tsx   upvote and priority score
+  components/VoteComparison.tsx comparison and confirmation dialog for a third issue
   components/SignInPrompt.tsx  "Sign in to vote" sheet; runs what you tapped after sign-in
   components/VolunteerCard.tsx top of a volunteer page: the details
   components/VolunteerAction.tsx the sign-up button, pinned to the bottom
@@ -93,8 +114,9 @@ All data goes through `src/api/client.ts`. Pages never fetch on their own.
 | `createEvent(input)` | `POST /events` with `NewEvent` | `VolunteerEvent` (host = the signed-in user) |
 | `getTrack2Issues()` | `GET /issues` | `Track2Issue[]`, the whole list (`up_votes` without the current user's vote, which goes in `my_vote`) |
 | `getTrack2Issue(id)` | `GET /issues/:id` | `Track2Issue`, or `null` on 404 |
-| `setVote(id, value)` | `PUT /issues/:id/vote` with `{ value: 1 }`, or `DELETE` to take it back | `VoteBudget`; `429` when today's votes are used up |
-| `getVoteBudget()` | `GET /me/votes` | `VoteBudget` (votes left today) |
+| `setVote(id, value)` | `PUT /issues/:id/vote` with `{ value: 1 }`, or `DELETE` to take it back | `VoteBudget`; `429` when both active slots are used |
+| `swapVote(id, removeId, expectedIds)` | `POST /issues/:id/vote/swap` with `{ removeIssueId, expectedIssueIds }` | `VoteBudget`; `409` if the two active votes changed |
+| `getVoteBudget()` | `GET /me/votes` | `VoteBudget` (`limit`, `votesUsed`, `votesRemaining`) |
 | `getMyHistory()` | `GET /me/history` | `VolunteerRecord[]`, newest first |
 | `getComments(type, id)` | `GET /events/:id/comments` or `/issues/:id/comments` | `Comment[]`, oldest first |
 | `addComment(type, id, body)` | `POST` the same path with `{ body }` | `Comment` |
