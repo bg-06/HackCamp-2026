@@ -15,10 +15,19 @@ export function readThemePref(): ThemePref {
 }
 
 // "system" leaves html without data-theme, so the CSS media query decides.
+const BAR = { light: '#ffffff', dark: '#111112' } // the phone's status bar, matching --bg
+
 export function applyThemePref(pref: ThemePref) {
   const root = document.documentElement
   if (pref === 'system') delete root.dataset.theme
   else root.dataset.theme = pref
+
+  // Two theme-color tags, one per system setting. On Auto they keep their own colours;
+  // with a pick, both get the picked colour so the status bar matches the app.
+  document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((meta) => {
+    const own = meta.media.includes('dark') ? BAR.dark : BAR.light
+    meta.content = pref === 'system' ? own : BAR[pref]
+  })
 }
 
 // Which theme is actually showing: the person's pick, or the system's when they left it on Auto.

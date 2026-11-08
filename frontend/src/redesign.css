@@ -859,3 +859,114 @@
   inset: 0;
   background: var(--cover-shade);
 }
+
+/* ---------- Native-app feel (matters most when installed to the home screen) ---------- */
+html,
+body {
+  overscroll-behavior: none; /* no pull-to-refresh or rubber-banding of the whole page */
+}
+body {
+  -webkit-tap-highlight-color: transparent; /* no grey flash on every tap */
+  -webkit-text-size-adjust: 100%;
+}
+.app {
+  padding-top: env(safe-area-inset-top);
+  background: var(--bg);
+}
+.page-content {
+  overscroll-behavior-y: contain; /* the list bounces, the app around it doesn't */
+}
+a,
+button,
+input,
+textarea,
+select,
+label {
+  touch-action: manipulation; /* no double-tap zoom, so taps fire straight away */
+}
+/* App chrome isn't text to select or long-press */
+.bottom-nav,
+.top-bar,
+.feed-tabs,
+.filter-row,
+.tile,
+.help-card,
+.issue-row,
+.list-row-head,
+.pill-button,
+.tag-pill,
+.theme-switch,
+.action-button,
+.outline-button,
+.hero-back {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+/* iOS zooms into any field under 16px when you tap it */
+.search-input,
+.comment-form textarea,
+.event-form input {
+  font-size: 16px;
+}
+/* The bar grows by the home-indicator area instead of squashing the icons */
+.bottom-nav {
+  height: calc(var(--nav-h) + env(safe-area-inset-bottom));
+}
+.action-bar {
+  padding-bottom: 10px;
+}
+
+/* Press feedback instead of hover underlines */
+a.tile:hover h3,
+.tile-link:hover h3,
+.issue-row-main:hover h3,
+.row-link:hover .row-title {
+  text-decoration: none;
+}
+.tile,
+.help-card,
+.issue-row,
+.list-row-head,
+.nav-plus,
+.pill-button,
+.action-button,
+.outline-button,
+.help-start,
+.vote-button {
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+.tile:active,
+.help-card:active,
+.issue-row:active {
+  transform: scale(0.98);
+}
+.nav-plus-wrap:active .nav-plus,
+.pill-button:active,
+.action-button:active,
+.outline-button:active,
+.help-start:active,
+.vote-button:active {
+  transform: scale(0.95);
+}
+.bottom-nav a:active,
+.feed-tabs a:active,
+.icon-button:active,
+.hero-back:active,
+.list-row-head:active {
+  opacity: 0.6;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tile,
+  .help-card,
+  .issue-row,
+  .list-row-head,
+  .nav-plus,
+  .pill-button,
+  .action-button,
+  .outline-button,
+  .help-start,
+  .vote-button {
+    transition: none;
+  }
+}
