@@ -1031,7 +1031,9 @@ a.tile:hover h3,
   font-size: 0.8125rem;
 }
 .needs-help {
-  margin: 0 -8px 14px;
+  /* Full-bleed rail, but the first card still lines up with the post columns (12px page padding). */
+  margin: 4px -12px 18px;
+  padding: 12px 0 16px;
 }
 .needs-help h2,
 .feed-heading {
@@ -1046,23 +1048,33 @@ a.tile:hover h3,
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  padding: 0 14px 6px;
+  padding: 0 12px 6px;
 }
 .needs-help-head .muted { margin: 0; }
+/* Prototype: a small rail label between chunks of the feed, not a second page heading. */
+.needs-help-head h2 {
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
 .help-strip {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   overflow-x: auto;
   margin: 0;
-  padding: 0 14px 4px;
+  padding: 0 12px 4px;
   list-style: none;
   scroll-snap-type: x mandatory;
-  scroll-padding: 0 14px;
+  scroll-padding: 0 12px;
   scrollbar-width: none;
+  /* Fade the next card at the right edge: the clearest cue that the rail scrolls. */
+  mask-image: linear-gradient(to right, #000 92%, transparent);
 }
 .help-strip::-webkit-scrollbar { display: none; }
 .help-card {
-  flex: 0 0 190px;
+  flex: 0 0 calc(100% - 32px); /* nearly a full viewport, with the next card peeking */
+  min-height: 207px;
   border: 1px solid var(--border);
   border-radius: var(--card-radius);
   background: var(--surface);
@@ -1073,19 +1085,19 @@ a.tile:hover h3,
   flex-direction: column;
   gap: 2px;
   height: 100%;
-  padding: 8px 12px 10px;
+  padding: 16px 18px;
   border-radius: var(--card-radius);
 }
 .help-card-link:hover { background: var(--surface-muted); }
 .help-card-link:focus-visible { outline-offset: -3px; }
 .help-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.help-more { display: flex; justify-content: center; align-items: center; padding: 10px 12px; }
+.help-more { flex: 0 0 auto; display: flex; justify-content: center; align-items: center; padding: 16px 18px; }
 .help-count {
   color: var(--text-muted);
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   font-weight: 600;
 }
-.help-card .row-title { line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.help-card .row-title { font-size: 1.15rem; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .help-card-link > .muted { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; margin-bottom: 2px; }
 .help-start {
   align-self: flex-start;
@@ -1095,7 +1107,7 @@ a.tile:hover h3,
   padding-top: 2px;
   gap: 6px;
   color: var(--blue-dark);
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 600;
 }
 
