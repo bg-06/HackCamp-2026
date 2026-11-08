@@ -43,7 +43,7 @@ Finish and validate organization-admin and moderator workflows, build the in-app
 ## Built with
 React, TypeScript, Vite, Express, PostgreSQL, Auth0, Python, Databricks, H3, MapLibre, Google Gemini (optional briefing wording).
 
-Add Vercel (frontend) and Railway (API) only after the team confirms those deployments. Add Maritime (agent box, prize track) only if the agent actually runs there. Do not claim a sponsor integration solely because a configuration or deployment guide exists.
+Add Vercel (frontend) and Railway (API) only after the team confirms those deployments. Do not claim a sponsor integration solely because a configuration or deployment guide exists.
 
 ## Submission links
 - Repository: https://github.com/bg-06/HackCamp-2026
