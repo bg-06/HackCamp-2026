@@ -406,23 +406,19 @@
               }
             ],
             "spec": {
-              "version": 3,
+              "version": 2,
               "widgetType": "symbol-map",
+              "mark": {
+                "opacity": 0.7
+              },
               "encodings": {
                 "coordinates": {
+                  "coordinateType": "longitude-latitude",
                   "latitude": {
-                    "fieldName": "latitude",
-                    "scale": {
-                      "type": "quantitative"
-                    },
-                    "displayName": "latitude"
+                    "fieldName": "latitude"
                   },
                   "longitude": {
-                    "fieldName": "longitude",
-                    "scale": {
-                      "type": "quantitative"
-                    },
-                    "displayName": "longitude"
+                    "fieldName": "longitude"
                   }
                 },
                 "color": {
@@ -442,16 +438,19 @@
                   },
                   "displayName": "track"
                 },
-                "extraTooltip": [
+                "extra": [
                   {
                     "fieldName": "category",
-                    "displayName": "category"
+                    "displayName": "Category"
                   },
                   {
                     "fieldName": "request_type",
-                    "displayName": "request_type"
+                    "displayName": "Request Type"
                   }
                 ]
+              },
+              "data": {
+                "queryName": "main_query"
               },
               "frame": {
                 "showTitle": true,
