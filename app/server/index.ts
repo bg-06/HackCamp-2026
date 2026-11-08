@@ -168,6 +168,14 @@ app.get('/events', async (req, res) => {
     e.source_withdrawn_at IS NULL AND e.done_at IS NULL AND (
       e.starts_at >= now() - interval '1 day'
       OR (e.starts_at IS NULL AND e.ends_at IS NULL AND e.kind IN ('city', 'org') AND e.signup_url IS NOT NULL)
+    ) AND (
+      NOT e.is_sample
+      OR NOT EXISTS (
+        SELECT 1 FROM events real
+        WHERE NOT real.is_sample AND real.source_withdrawn_at IS NULL AND real.done_at IS NULL
+          AND (real.starts_at >= now() - interval '1 day'
+            OR (real.starts_at IS NULL AND real.ends_at IS NULL AND real.kind IN ('city', 'org') AND real.signup_url IS NOT NULL))
+      )
     )
   `)
   res.json(rows.map(toEvent))

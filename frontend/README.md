@@ -80,8 +80,8 @@ All data goes through `src/api/client.ts`. Pages never fetch on their own.
 
 1. Configure the root `.env` with the Postgres connection settings.
 2. From `app/`, run `npm run db:migrate`, then `npm run ingest:volunteer-events`, then `npm run api`.
-3. In another terminal, run `npm run dev:api` from `frontend/`.
-4. In dev, `/api/*` is forwarded to `http://localhost:8000`. Set `VITE_API_BASE` for a deployed API.
+3. In another terminal, run `npm run dev` from `frontend/`; the real API is the default.
+4. In dev, `/api/*` is forwarded to `http://localhost:8000`. Set `VITE_API_BASE` for a deployed API. Use `npm run dev:mock` only for isolated UI work.
 
 | Function | Request | Returns |
 |---|---|---|

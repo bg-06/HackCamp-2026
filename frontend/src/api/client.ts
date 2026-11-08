@@ -1,13 +1,13 @@
 // Every call to the backend goes through this file.
 //
-// Pages and components only depend on the types returned here. Mock mode remains available for
-// UI-only work; set VITE_USE_MOCK=false (or run npm run dev:api) to use the Postgres-backed API.
+// Pages and components only depend on the types returned here. The Postgres-backed API is the
+// default; set VITE_USE_MOCK=true (or run npm run dev:mock) for isolated UI work.
 
 import { COMMENTS } from "../data/mockComments";
 import { HELP_HOTSPOTS, MY_HISTORY, TRACK2_ISSUES, VOLUNTEER_EVENTS } from "../data/mockData";
 import type { Comment, CommentTarget, HelpHotspot, NewEvent, Track2Issue, VolunteerEvent, VolunteerRecord, Vote } from "../types";
 
-export const USE_MOCK = import.meta.env.VITE_USE_MOCK !== "false";
+export const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
 const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
