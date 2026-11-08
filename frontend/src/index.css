@@ -1160,6 +1160,8 @@ a.tile:hover h3,
 
 /* Feed header from the suggestion design. */
 .home-header .top-bar { grid-template-columns: 48px 1fr 48px; padding: 6px 8px; }
+.home-header .header-title { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.header-logo { width: 30px; height: 30px; object-fit: contain; }
 .home-header .filter-row { align-items: center; padding-top: 4px; }
 .home-header .filter-chip { display: inline-flex; align-items: center; gap: 5px; border-radius: 9999px; background: var(--surface-muted); color: var(--text-muted); }
 .home-header .filter-chip.selected { background: var(--text); color: var(--bg); }

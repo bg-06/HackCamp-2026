@@ -18,7 +18,7 @@ export default function TopBar({ tab, searchOpen, onToggleSearch, menuOpen, onTo
       <button className={`icon-button ${menuOpen ? 'active' : ''}`} onClick={onToggleMenu} aria-label="Sort and location" aria-expanded={menuOpen}>
         <Menu size={24} />
       </button>
-      <h1 className="header-title">{TITLES[tab]}</h1>
+      <h1 className="header-title"><img className="header-logo" src="/greenhands-logo.png" alt="" />{TITLES[tab]}</h1>
       <button className={`icon-button ${searchOpen ? 'active' : ''}`} onClick={onToggleSearch} aria-label={searchOpen ? 'Close search' : 'Search'} aria-expanded={searchOpen}>
         {searchOpen ? <X size={24} /> : <Search size={24} />}
       </button>
