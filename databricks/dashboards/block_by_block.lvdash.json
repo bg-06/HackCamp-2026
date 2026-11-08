@@ -1,0 +1,496 @@
+{
+  "datasets": [
+    {
+      "name": "ds1",
+      "displayName": "Track 1: where neighbours can help, by area",
+      "queryLines": [
+        "SELECT local_area, count(*) AS hotspots, sum(times_reported) AS reports\n",
+        "FROM bbb.gold.help_hotspots\n",
+        "WHERE local_area IS NOT NULL\n",
+        "GROUP BY local_area\n",
+        "ORDER BY hotspots DESC"
+      ]
+    },
+    {
+      "name": "ds2",
+      "displayName": "Track 2: most pressing City-only issues",
+      "queryLines": [
+        "SELECT local_area, request_type, address, open_cases, days_open, times_reported_12m, round(base_score, 1) AS score\n",
+        "FROM bbb.gold.track2_issues\n",
+        "ORDER BY base_score DESC\n",
+        "LIMIT 25"
+      ]
+    },
+    {
+      "name": "ds3",
+      "displayName": "Cases opened per week, by track, last 12 months",
+      "queryLines": [
+        "SELECT date_trunc('week', opened_at) AS week, track, count(*) AS cases\n",
+        "FROM bbb.gold.cases_enriched\n",
+        "WHERE opened_at >= current_date() - INTERVAL 12 MONTHS AND track IN ('neighbours', 'city')\n",
+        "GROUP BY ALL\n",
+        "ORDER BY week"
+      ]
+    },
+    {
+      "name": "ds4",
+      "displayName": "How fast the City closes cases, by category",
+      "queryLines": [
+        "SELECT category, percentile_approx(resolution_days, 0.5) AS median_days, count(*) AS closed_cases\n",
+        "FROM bbb.gold.cases_enriched\n",
+        "WHERE closed_on IS NOT NULL AND resolution_days >= 0 AND opened_at >= current_date() - INTERVAL 12 MONTHS\n",
+        "GROUP BY category\n",
+        "ORDER BY median_days DESC"
+      ]
+    },
+    {
+      "name": "ds5",
+      "displayName": "Open issues in the last 90 days, as points",
+      "queryLines": [
+        "SELECT latitude, longitude, track, category, request_type\n",
+        "FROM bbb.gold.cases_enriched\n",
+        "WHERE status = 'Open' AND track IN ('neighbours', 'city') AND latitude IS NOT NULL\n",
+        "  AND opened_at >= current_date() - INTERVAL 90 DAYS"
+      ]
+    },
+    {
+      "name": "ds6",
+      "displayName": "AI sorting: how many request types landed in each category and track",
+      "queryLines": [
+        "SELECT t.category, coalesce(o.track, t.ai_track) AS track, count(*) AS request_types\n",
+        "FROM bbb.gold.type_categories t\n",
+        "LEFT JOIN bbb.gold.track_overrides o USING (request_type)\n",
+        "GROUP BY ALL\n",
+        "ORDER BY request_types DESC"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "main",
+      "displayName": "Block by Block: Vancouver 311",
+      "layout": [
+        {
+          "widget": {
+            "name": "title",
+            "multilineTextboxSpec": {
+              "lines": [
+                "# Block by Block: Vancouver 311\n",
+                "Where neighbours can help (green) and what only the City can fix (red)."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "q1",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds1",
+                  "fields": [
+                    {
+                      "name": "local_area",
+                      "expression": "`local_area`"
+                    },
+                    {
+                      "name": "hotspots",
+                      "expression": "`hotspots`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "local_area",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "local_area"
+                },
+                "y": {
+                  "fieldName": "hotspots",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "hotspots"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Track 1: where neighbours can help, by area"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "q2",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds2",
+                  "fields": [
+                    {
+                      "name": "local_area",
+                      "expression": "`local_area`"
+                    },
+                    {
+                      "name": "request_type",
+                      "expression": "`request_type`"
+                    },
+                    {
+                      "name": "address",
+                      "expression": "`address`"
+                    },
+                    {
+                      "name": "open_cases",
+                      "expression": "`open_cases`"
+                    },
+                    {
+                      "name": "days_open",
+                      "expression": "`days_open`"
+                    },
+                    {
+                      "name": "times_reported_12m",
+                      "expression": "`times_reported_12m`"
+                    },
+                    {
+                      "name": "score",
+                      "expression": "`score`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "local_area",
+                    "displayName": "local_area"
+                  },
+                  {
+                    "fieldName": "request_type",
+                    "displayName": "request_type"
+                  },
+                  {
+                    "fieldName": "address",
+                    "displayName": "address"
+                  },
+                  {
+                    "fieldName": "open_cases",
+                    "displayName": "open_cases"
+                  },
+                  {
+                    "fieldName": "days_open",
+                    "displayName": "days_open"
+                  },
+                  {
+                    "fieldName": "times_reported_12m",
+                    "displayName": "times_reported_12m"
+                  },
+                  {
+                    "fieldName": "score",
+                    "displayName": "score"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Track 2: most pressing City-only issues"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 2,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "q3",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds3",
+                  "fields": [
+                    {
+                      "name": "week",
+                      "expression": "`week`"
+                    },
+                    {
+                      "name": "track",
+                      "expression": "`track`"
+                    },
+                    {
+                      "name": "cases",
+                      "expression": "`cases`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "week",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "week"
+                },
+                "y": {
+                  "fieldName": "cases",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "cases"
+                },
+                "color": {
+                  "fieldName": "track",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "neighbours",
+                        "color": "#2f7a2a"
+                      },
+                      {
+                        "value": "city",
+                        "color": "#9b2f26"
+                      }
+                    ]
+                  },
+                  "displayName": "track"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Cases opened per week, by track, last 12 months"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 9,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "q4",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds4",
+                  "fields": [
+                    {
+                      "name": "category",
+                      "expression": "`category`"
+                    },
+                    {
+                      "name": "median_days",
+                      "expression": "`median_days`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "category",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "category"
+                },
+                "y": {
+                  "fieldName": "median_days",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "median_days"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "How fast the City closes cases, by category"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 9,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "q5",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds5",
+                  "fields": [
+                    {
+                      "name": "latitude",
+                      "expression": "`latitude`"
+                    },
+                    {
+                      "name": "longitude",
+                      "expression": "`longitude`"
+                    },
+                    {
+                      "name": "track",
+                      "expression": "`track`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "symbol-map",
+              "encodings": {
+                "coordinates": {
+                  "latitude": {
+                    "fieldName": "latitude",
+                    "displayName": "latitude"
+                  },
+                  "longitude": {
+                    "fieldName": "longitude",
+                    "displayName": "longitude"
+                  }
+                },
+                "color": {
+                  "fieldName": "track",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "neighbours",
+                        "color": "#2f7a2a"
+                      },
+                      {
+                        "value": "city",
+                        "color": "#9b2f26"
+                      }
+                    ]
+                  },
+                  "displayName": "track"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Open issues in the last 90 days, as points"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 16,
+            "width": 3,
+            "height": 8
+          }
+        },
+        {
+          "widget": {
+            "name": "q6",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds6",
+                  "fields": [
+                    {
+                      "name": "category",
+                      "expression": "`category`"
+                    },
+                    {
+                      "name": "track",
+                      "expression": "`track`"
+                    },
+                    {
+                      "name": "request_types",
+                      "expression": "`request_types`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "category",
+                    "displayName": "category"
+                  },
+                  {
+                    "fieldName": "track",
+                    "displayName": "track"
+                  },
+                  {
+                    "fieldName": "request_types",
+                    "displayName": "request_types"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "AI sorting: how many request types landed in each category and track"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 16,
+            "width": 3,
+            "height": 8
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS"
+    }
+  ]
+}
