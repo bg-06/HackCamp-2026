@@ -1,9 +1,8 @@
-import { ChevronLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { getVolunteerEvent } from "../api/client";
 import Discussion from "../components/Discussion";
-import PlaceSection from "../components/PlaceSection";
+import DetailHero from "../components/DetailHero";
 import VolunteerAction from "../components/VolunteerAction";
 import VolunteerCard from "../components/VolunteerCard";
 import { useFeed } from "../state/feed";
@@ -51,19 +50,10 @@ export default function VolunteerPage() {
   const goBack = () => (location.key !== "default" ? navigate(-1) : navigate("/"));
 
   return (
-    <div className="page">
-      <header className="home-header">
-        <div className="top-bar">
-          <button className="icon-button" onClick={goBack} aria-label="Back">
-            <ChevronLeft size={24} />
-          </button>
-          <p className="header-title">Volunteer</p>
-          <span aria-hidden="true" />
-        </div>
-      </header>
-
-      <main className="page-content">
-        {event === undefined && !error && <div className="skeleton" style={{ height: 320 }} aria-busy="true" />}
+    <div className="page light">
+      <main className="page-content flush">
+        {!event && <DetailHero title="" place="" onBack={goBack} />}
+        {event === undefined && !error && <div className="skeleton detail-pad" style={{ height: 320 }} aria-busy="true" />}
 
         {error && !event && (
           <div className="empty" role="alert">
@@ -91,9 +81,11 @@ export default function VolunteerPage() {
 
         {event && (
           <>
-            <VolunteerCard event={event} />
-            <PlaceSection lat={event.lat} lng={event.lng} label={`${event.location}, ${event.localArea}`} />
-            <Discussion type="event" id={event.id} />
+            <DetailHero title={event.title} lat={event.lat} lng={event.lng} place={`${event.location}, ${event.localArea}`} onBack={goBack} />
+            <div className="detail-pad">
+              <VolunteerCard event={event} />
+              <Discussion type="event" id={event.id} />
+            </div>
           </>
         )}
       </main>

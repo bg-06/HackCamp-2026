@@ -1,4 +1,4 @@
-import { ChevronDown, LocateFixed, TriangleAlert } from "lucide-react";
+import { LocateFixed, TriangleAlert } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { USE_MOCK } from "../api/client";
@@ -178,31 +178,30 @@ export default function HomePage() {
   }
 
   const locationNote = LOCATION_NOTES[locStatus];
-  const sortLabel = sorts.find((s) => s.key === sort)?.label ?? "For you";
 
   return (
     <div className="page">
       <header className={`home-header track-${tab}`}>
-        <TopBar title={tab === "volunteer" ? "Volunteer" : "Issues"} searchOpen={searchOpen[tab]} onToggleSearch={toggleSearch} />
-
-        <div className="control-row">
-          <button
-            className={`control-pill ${here ? "on" : ""}`}
-            aria-pressed={Boolean(here)}
-            onClick={toggleNearMe}
-            disabled={locStatus === "locating"}
-          >
-            <LocateFixed size={16} aria-hidden="true" />
-            Near me
-          </button>
-          <button className="control-pill" aria-expanded={sortOpen} onClick={() => setSortOpen(!sortOpen)}>
-            Sort: {sortLabel}
-            <ChevronDown size={16} aria-hidden="true" />
-          </button>
-        </div>
+        <TopBar
+          tab={tab}
+          searchOpen={searchOpen[tab]}
+          onToggleSearch={toggleSearch}
+          menuOpen={sortOpen}
+          onToggleMenu={() => setSortOpen(!sortOpen)}
+        />
 
         {sortOpen && (
           <div className="filter-row" role="group" aria-label="Sort by">
+            <button
+              className={`filter-chip ${here ? "selected" : ""}`}
+              aria-pressed={Boolean(here)}
+              onClick={toggleNearMe}
+              disabled={locStatus === "locating"}
+            >
+              <LocateFixed size={14} aria-hidden="true" />
+              Near me
+            </button>
+            <span className="filter-divider" aria-hidden="true" />
             {sorts.map((s) => (
               <button
                 key={s.key}

@@ -1,21 +1,23 @@
-/* Block by Block styles. Dark, image-led feed with a single blue interaction accent. */
+/* Block by Block styles (UI suggestion). Dark photo feed with a red accent on the home tabs;
+   light, place-style detail pages and profile with a deep teal accent. */
 
 :root {
-  --blue: #3b82f6;
-  --blue-dark: #60a5fa;
-  --blue-light: #172554;
+  --red: #ff2442;
+  --blue: var(--red);
+  --blue-dark: #ff5c73;
+  --blue-light: #3a1118;
   --green: var(--blue);
   --green-dark: var(--blue);
   --green-light: var(--blue-light);
   --navy: var(--blue);
   --navy-light: var(--blue-light);
 
-  --bg: #111114;
-  --surface: #1c1c20;
-  --surface-muted: #26262b;
-  --border: #303036;
-  --text: #f4f4f5;
-  --text-muted: #a5a5ad;
+  --bg: #111112;
+  --surface: #1c1c1e;
+  --surface-muted: #2a2a2d;
+  --border: #2c2c2f;
+  --text: #f2f2f3;
+  --text-muted: #9c9ca3;
   --warning: #f0a35e;
 
   --track1: var(--blue);
@@ -23,12 +25,34 @@
   --track2: var(--blue);
   --track2-light: var(--blue-light);
 
-  --radius: 8px;
-  --nav-h: 60px;
+  --radius: 10px;
+  --nav-h: 68px;
+  --serif: "Playfair Display", Georgia, "Times New Roman", serif;
 
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
   background: var(--bg);
+}
+
+/* Light pages (detail pages and profile): white, hairline borders, deep teal accent */
+.page.light {
+  --teal: #0f5960;
+  --blue: var(--teal);
+  --blue-dark: #12707a;
+  --blue-light: #e3f0f0;
+  --track1: var(--teal);
+  --track1-light: var(--blue-light);
+  --track2: var(--teal);
+  --track2-light: var(--blue-light);
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-muted: #f1f2f4;
+  --border: #e2e4e7;
+  --text: #111214;
+  --text-muted: #8a8f97;
+  --warning: #b4581b;
+  background: var(--bg);
+  color: var(--text);
 }
 
 * {
