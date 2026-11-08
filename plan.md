@@ -229,11 +229,10 @@ Ranked by how much the team wants each prize (lower total = more wanted), and wh
 |---|---|---|---|
 | 1 | Databricks | "Most creative and thoughtful" use of at least one Databricks product | **Core of the project.** Pipeline, AI Functions (sorting request types into the two tracks), H3 hotspots, vote ranking, before and after impact, dashboard and Genie all run on Databricks, reading our Postgres through Lakehouse Federation |
 | 2 | Freebuff | Working project built with Freebuff, explain how it helped | Use Freebuff as the team's coding agent all weekend and keep a log (section 9) |
-| 3 | Auth0 | Creative authentication and application security | Auth0 does resident sign-in, **roles** (resident, org admin, moderator: only an org admin can post as an org), and secures every machine-to-machine call (agent, n8n) with scoped tokens (section 7) |
+| 3 | Auth0 | Creative authentication and application security | Auth0 does resident sign-in, **roles** (resident, org admin, moderator: only an org admin can post as an org), and secures every machine-to-machine call (the agent) with scoped tokens (section 7) |
 | 4 | Maritime | An AI agent deployed on Maritime, with a short demo | **Block Steward agent** in a Maritime Agent Box: spots recurring hotspots with nothing planned, suggests events to nearby orgs, posts weekly "ways to help" briefings |
 | 5 | Tailscale | Awarded through superlatives | Opt into **Community Impact** (impact statement) and **Best Design** (Figma link). nwChoice is automatic |
 | 6 | ElevenLabs | Only through Overall Winner / Beginner Overall prize packages | Aim for Overall. Optional stretch: spoken neighbourhood briefings for accessibility |
-| 7 | n8n (optional) | Creative n8n automation | Optional notifications: new events to people following an area and new hotspots to nearby orgs. Databricks handles event-impact refresh natively |
 | 8+ | Gemini | MLH swag | Used as the agent's model since it's free. Opt in, no extra work |
 | Drop | Solana, Vultr, Tiger Data, Entire, GoDaddy | | Not worth the time |
 
@@ -244,7 +243,7 @@ What changed from the previous plan and why:
 - **Databricks runs the AI.** Classification and summaries use Databricks AI Functions instead of calling Gemini from notebooks. No outbound calls needed from inside Databricks for the AI step.
 - **The "AI" part becomes a real agent on Maritime** instead of a batch script.
 - **Google Maps is swapped for MapLibre** with free tiles. No prize attached, and it avoids setting up a Google Cloud billing account.
-- **Auth0 handles resident sign-in too**, since there's no platform login any more. One login for residents (Google or email), plus M2M tokens for the agent and n8n.
+- **Auth0 handles resident sign-in too**, since there's no platform login any more. One login for residents (Google or email), plus an M2M token for the agent.
 
 ---
 
@@ -260,7 +259,6 @@ flowchart LR
     E -->|publish_gold task| P[(Postgres<br/>app tables + gold_* tables)]
     P -->|events, votes via Unity Catalog| R[Databricks: refresh ranking + impact<br/>every 15 minutes]
     P <--> F[React frontend + Express API]
-    F -->|optional event notifications| N[n8n]
     R --> E
     S[Maritime Agent Box<br/>Block Steward] -->|Auth0 M2M token| F
     S -->|SQL API| E
@@ -273,7 +271,7 @@ In plain words:
 - Gold tables find recurring Track 1 hotspots, group open Track 2 cases into issues people can vote on, rank them, and measure 311 reports before and after each event
 - Gold tables are copied back into Postgres (`gold_*` tables) at the end of each job run. The Next.js app reads them from Postgres for the map, area pages and vote page
 - Residents sign in with Auth0. Everything they create (events, RSVPs, votes, comments, photos) is written to Postgres, and Databricks reads it back through Unity Catalog
-- Databricks refreshes app vote rankings and event impact every 15 minutes. Optional n8n workflows notify people about new events and nearby orgs about hotspots
+- Databricks refreshes app vote rankings and event impact every 15 minutes. All scheduled work runs as Databricks jobs
 - The Block Steward agent on Maritime looks for recurring hotspots with nothing planned, suggests events to nearby orgs, and posts weekly "ways to help" briefings on area pages
 - Every service-to-service call carries an Auth0 access token with specific scopes
 
@@ -290,7 +288,7 @@ In plain words:
 | Photo storage | Vercel Blob (free tier), URL stored in Postgres |
 | Map | MapLibre GL JS with free OpenFreeMap tiles, deck.gl `H3HexagonLayer` via `@deck.gl/mapbox` interleaved overlay |
 | Agent | Maritime Agent Box running a small Python agent, Gemini as the model |
-| Automation | Native Databricks Jobs for ranking/impact refresh; optional n8n for notifications |
+| Automation | Databricks Jobs for everything scheduled (daily ingest and pipeline, 15-minute ranking/impact refresh). No n8n |
 | Service auth | Auth0 API with client-credentials (M2M) apps and scopes, Auth0 RBAC roles for org admins and moderators |
 | Build tool | Freebuff CLI as the coding agent for everyone |
 | Design | Figma for the Best Design submission |
@@ -362,7 +360,7 @@ This is the prize we want most, so it gets the most care and the most visible de
 - One person owns the workspace and adds the others as users.
 - First thing: run a network test notebook (`requests.get` against `opendata.vancouver.ca`). The trial limits external network access. (Done 2026-11-07: it works, so the fetch runs as a Databricks job task. If it ever fails, the same fetch script runs in the Maritime agent box, since it only needs to reach the City API and Postgres.) The AI step no longer needs outbound access because it uses Databricks-hosted models.
 - Create a secret scope `bbb` for anything sensitive.
-- Create one service principal (or a personal access token for the weekend) that n8n and the agent use to call the SQL and Jobs APIs. Store it as a secret in each of those, never in the repo. The app doesn't need it: it only talks to Postgres.
+- Create one service principal (or a personal access token for the weekend) that the agent uses to call the SQL and Jobs APIs. Store it as a secret in each of those, never in the repo. The app doesn't need it: it only talks to Postgres.
 - Connect **our existing Postgres**: database `hackcamp` on `db-hackcamp.noodlelab.ca:5433`, user `hackcamp`. The connection details live in the repo-root `env` file (gitignored; `env.example` is the committed template with the connection steps). It must be reachable from Databricks serverless over the internet. If it has an IP allowlist, allow Databricks' outbound IPs.
 - **Open issue (2026-11-07):** the server rejects SSL (`server does not support SSL`), so `sslmode=require` fails. Turn SSL on before Databricks connects over the internet; otherwise the password and data travel in plain text.
 - For the weekend everything uses the one `hackcamp` user. If there's time, split it into `bbb_app` (Next.js), `bbb_ingest` (311 fetch, `publish_gold`) and a read-only `bbb_reader` for Lakehouse Federation.
@@ -726,7 +724,7 @@ export async function GET() {
 }
 ```
 
-The agent and n8n can keep using the SQL Statement API against `bbb.gold` for anything that isn't published to Postgres. Keep the SQL warehouse on a short auto-stop; it's now only needed for the job, Genie and the dashboard.
+The agent can keep using the SQL Statement API against `bbb.gold` for anything that isn't published to Postgres. Keep the SQL warehouse on a short auto-stop; it's now only needed for the job, Genie and the dashboard.
 
 Honest limit: new app data reaches the gold tables only after a job run (pipeline plus publish, a few minutes). Show residents' own new events, RSVPs and votes straight from the app tables, and use the `gold_*` tables for map stats, hotspots, Track 2 issues and impact.
 
@@ -735,8 +733,8 @@ Honest limit: new app data reaches the gold tables only after a job run (pipelin
 **Current implementation:** `bbb_daily` runs incremental ingest → pipeline → freeze
 type labels → rankings → summaries → publish at 06:00 Vancouver. A second native
 Databricks schedule runs `bbb_refresh_rankings` (rankings → publish) every 15 minutes
-to pick up app votes and completed events from Postgres. n8n is optional, not required
-for this refresh. See `databricks/README.md` for operational commands and verification.
+to pick up app votes and completed events from Postgres. Any new scheduled work goes
+in a Databricks job too. See `databricks/README.md` for operational commands and verification.
 
 Two native Lakeflow Jobs:
 
@@ -785,7 +783,6 @@ How each piece is built, kept as simple as possible:
 | City data | Read from the `gold_*` tables (section 5.7). The vote page joins `gold_track2_issues` with `votes` for a live score. No caching layer needed |
 | Event chat | A `comments` table per event, refreshed every 10 seconds on the event page. No real-time service; it's enough for a demo and much less to build |
 | Photos | Upload to Vercel Blob from an API route, strip metadata first, save the URL in Postgres |
-| Webhooks | Optional n8n webhook after an event is published for notifications. Event-impact refresh uses the native Databricks schedule |
 | Agent endpoints | `/api/agent/*` routes, protected by Auth0 M2M tokens (section 7) |
 
 Lean on a component library (shadcn/ui) so the UI looks consistent with little effort; the Figma file drives colours and layout for Best Design.
@@ -800,15 +797,14 @@ Auth0 handles both kinds of caller:
   - **resident** (everyone): RSVP, vote, create an event as themselves, comment
   - **org admin**: post events as an organisation, edit its profile, accept agent suggestions. Granted when someone claims an org and a moderator approves it
   - **moderator**: approve org claims, hide events or comments. Requires MFA
-- **Machines** (the agent and n8n) get scoped M2M tokens. This is where most of the real risk in this system sits: an agent and an automation tool that can write into a civic data app.
+- **Machines** (the Block Steward agent) get scoped M2M tokens. This is where most of the real risk in this system sits: an AI agent that can write into a civic data app.
 
 Setup:
 
 - Regular web application **blockbyblock-web** for sign-in, with Google as a social connection
 - Auth0 RBAC roles `org_admin` and `moderator`, with permissions `events:post_as_org`, `orgs:edit`, `moderation:write`. An Auth0 Action adds the user's roles and org ids to the session token, and API routes check them
-- Auth0 API: `https://api.blockbyblock` with scopes `briefings:post`, `suggestions:post`, `notifications:read`
+- Auth0 API: `https://api.blockbyblock` with scopes `briefings:post`, `suggestions:post`
 - M2M application **block-steward-agent**: scopes `briefings:post`, `suggestions:post`
-- M2M application **n8n-notify**: scope `notifications:read` (reads who follows an area, to send alerts)
 - Auth0 Action on the M2M token flow that adds a custom claim with the caller name, so logs show which machine did what
 
 Enforcement in a Next.js route handler with `jose`, checking the token against Auth0's JWKS:
@@ -857,19 +853,14 @@ Record a 30-second clip of the agent waking, finding a hotspot with nothing plan
 
 ---
 
-## 9. n8n and Freebuff
+## 9. Freebuff
 
-**n8n workflows** (keep them visible and named well, judges will look at the canvas):
-
-- *New event*: app webhook when an event is published → get Auth0 token → read who follows that area (`notifications:read`) → email them or post in a Discord channel
-- *Event done*: no n8n workflow is required. The app commits completion to Postgres; native `bbb_refresh_rankings` refreshes impact every 15 minutes. A manual Databricks run can refresh it immediately during the demo
-- *Hotspot alert for orgs*: daily → query new Track 1 hotspots from Databricks → email org admins whose area it's in
-- Optional: weekly digest per area (upcoming events and top Track 2 issues), and a moderation queue that emails moderators about pending org claims
+We don't use n8n. Scheduled work runs as Databricks jobs: the daily `bbb_daily` job and the 15-minute `bbb_refresh_rankings` job, which picks up completed events from Postgres. For an immediate refresh during the demo, run `databricks bundle run bbb_refresh_rankings`. If we add a hotspot alert for orgs later, it's a task in a Databricks job, not a separate tool.
 
 **Freebuff** (the judges want to hear how it helped):
 
 - Everyone installs it at the start: `npm install -g freebuff`
-- Use it for scaffolding (Next.js pages and API routes, n8n webhook handlers, agent loop) and for debugging
+- Use it for scaffolding (pages and API routes, the agent loop) and for debugging
 - One person keeps `FREEBUFF_LOG.md`: what we asked it, what it produced, time it saved, a couple of screenshots
 - Mention it in the video and the Devpost write-up
 
@@ -889,7 +880,6 @@ block-by-block/
 │   └── notebooks/publish_gold.py # bbb.gold → Postgres gold_* tables
 ├── app/                       # Next.js app (Vercel), db/migrations/ for Postgres tables
 ├── agent/                     # Maritime Block Steward
-├── n8n/                       # exported workflow JSON
 ├── scripts/
 │   ├── pull_311_sample.py     # pulls schema, sample and profile (--full for the parquet)
 │   ├── load_311_to_postgres.py # one-time COPY of the full parquet into raw_311_requests
@@ -915,7 +905,7 @@ block-by-block/
 | P1 | Databricks: ingestion, pipeline, AI Functions, job, dashboard, Genie | Databricks |
 | P2 | Next.js app: map, volunteer cards and area page, create event, vote page, event chat, Postgres tables, Vercel deploy | Best Design |
 | P3 | Maritime agent and Auth0 | Maritime, Auth0, Gemini |
-| P4 | n8n workflows, Figma, impact statement, Freebuff log, video and pitch | n8n, Freebuff, Community Impact |
+| P4 | Figma, impact statement, Freebuff log, video and pitch | Freebuff, Community Impact, Best Design |
 
 Everyone uses Freebuff.
 
@@ -928,8 +918,8 @@ Everyone uses Freebuff.
 - Next.js app scaffolded and deployed once to Vercel (empty) so deploys are proven
 - Our Postgres reachable from Databricks, roles created, foreign catalog `bbb_app` registered; `DATABASE_URL` in Vercel env vars and `pg_url` in the `bbb` secret scope
 - Maritime box created, Auth0 tenant, web app, API and M2M apps created
-- n8n account ready, Freebuff installed on every laptop
-- Opt into prizes on Devpost: Databricks, Freebuff, Auth0, Maritime, n8n, Gemini, Community Impact, Best Design
+- Freebuff installed on every laptop
+- Opt into prizes on Devpost: Databricks, Freebuff, Auth0, Maritime, Gemini, Community Impact, Best Design
 
 **Hours 1 to 6: data and skeleton**
 - P1: bronze, silver, `type_categories` with tracks, `hotspots_h3`; review the Track 1 list by hand and fill `track_overrides`
@@ -942,13 +932,12 @@ Everyone uses Freebuff.
 - P1: `help_hotspots`, `track2_issues`, area summaries, `publish_gold`, job wired; `scripts/seed_orgs.py`
 - P2: area page (cards from Postgres), hotspot page, create event prefilled from a hotspot, RSVP
 - P3: Auth0 roles (org admin, moderator) and org claim; agent event suggestions end to end
-- P4: n8n *New event* workflow against real endpoints
 
 **Hours 12 to 16: community features** (sleep in shifts around here)
 - P2: vote page with live score, mark event done with photo, event chat (comments with polling)
 - P3: weekly briefing posts onto the area page
 - P1: `issue_priority`, `event_impact`, AI/BI dashboard and Genie space; find a real past before and after example
-- P4: optional *Hotspot alert for orgs* workflow, impact statement draft; coordinate verification of native event-impact refresh with P1/P2
+- P4: impact statement draft; coordinate verification of native event-impact refresh with P1/P2
 
 **Hours 16 to 20: polish**
 - Design pass using the Figma, mobile layout, empty and error states
@@ -961,7 +950,7 @@ Everyone uses Freebuff.
 - Write the Devpost entry: problem statement, impact statement, how Freebuff helped, how each sponsor tool is used
 - Final deploy, warm the SQL warehouse, rehearse
 
-**Cut order if behind:** ElevenLabs, moderation screens (approve by hand), event chat, hotspot alert for orgs, weekly briefing (keep the AI summary as a static card), agent suggestions (keep Start an event from a hotspot). Never cut: map, volunteer cards, start an event from a hotspot, RSVP, vote page.
+**Cut order if behind:** ElevenLabs, moderation screens (approve by hand), event chat, weekly briefing (keep the AI summary as a static card), agent suggestions (keep Start an event from a hotspot). Never cut: map, volunteer cards, start an event from a hotspot, RSVP, vote page.
 
 ---
 
@@ -1002,7 +991,6 @@ Follows the pitch in section 0 and the four demo flows in the UI flow.
 ## 15. Open questions for the team
 
 - Are we registered as a beginner team? If yes, also opt into Most Accessible Design and Best Problem-Solution Fit (more Tailscale chances)
-- Does anyone already have n8n Cloud, or do we self-host it in the Maritime box?
 - Who records the video, and when
 
 ---
