@@ -5,6 +5,7 @@ import { createEvent, getSuggestions, type Suggestion } from "../api/client";
 import { describeReports, hotspotKind } from "../lib/hotspots";
 import { VAN311_URL } from "../lib/issues";
 import { useFeed } from "../state/feed";
+import { useAuth } from "../state/auth";
 import type { HelpHotspot, NewEvent } from "../types";
 
 const TZ = "America/Vancouver";
@@ -33,15 +34,16 @@ export default function NewEventPage() {
   const [params] = useSearchParams();
   const hotspotId = params.get("hotspot") ?? "";
   const suggestionId = params.get("suggestion") ?? "";
+  const { ready, signedIn } = useAuth();
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
   const [suggestionLoaded, setSuggestionLoaded] = useState(!suggestionId);
   useEffect(() => {
-    if (!suggestionId) return;
+    if (!suggestionId || !ready || !signedIn) return;
     let active = true;
     getSuggestions().then(items => { if (active) setSuggestion(items.find(s => s.id === suggestionId) ?? null); })
       .catch(() => { if (active) setSuggestion(null); }).finally(() => { if (active) setSuggestionLoaded(true); });
     return () => { active = false; };
-  }, [suggestionId]);
+  }, [suggestionId, ready, signedIn]);
   const { hotspots } = useFeed();
   const draftHotspot = suggestion?.payload.event_draft.hotspot_id.replace(/^([^:|]+):/, "$1|");
   const hotspot = hotspots.items?.find((h) => h.id === (suggestionId ? draftHotspot : hotspotId));
@@ -51,6 +53,8 @@ export default function NewEventPage() {
       <Header />
       <main className="page-content">
         {!hotspots.items && !hotspots.error && <div className="skeleton" style={{ height: 320 }} aria-busy="true" />}
+        {suggestionId && !ready && <p className="muted" role="status">Checking sign-in…</p>}
+        {suggestionId && ready && !signedIn && <p className="form-error" role="alert">Sign in with an approved organization account to plan this suggestion.</p>}
         {suggestionId && suggestionLoaded && !suggestion && <p className="form-error">This suggestion is unavailable. Sign in with an approved organization account and try again.</p>}
         {suggestionLoaded && (!suggestionId || suggestion) && (hotspots.error || (hotspots.items && !hotspot)) && (
           <div className="empty">

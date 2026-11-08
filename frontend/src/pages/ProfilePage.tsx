@@ -1,4 +1,4 @@
-import { TriangleAlert } from "lucide-react";
+import { Settings, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getMyHistory, USE_MOCK } from "../api/client";
@@ -37,10 +37,11 @@ export default function ProfilePage() {
     <div className="page">
       <header className="simple-header">
         <h1>Profile</h1>
+        <Link className="profile-settings icon-button" to="/settings" aria-label="Settings"><Settings size={22} /></Link>
       </header>
 
       <main className="page-content">
-        <p><Link className="text-link" to="/community-updates">Community updates and organization suggestions</Link></p>
+        <Link className="community-link" to="/community-updates">Community updates <span aria-hidden="true">→</span></Link>
         <section className="profile-head">
           <span className="avatar" aria-hidden="true">
             {signedIn && picture ? (
@@ -87,7 +88,7 @@ export default function ProfilePage() {
                 <dd>{votes.length}</dd>
               </div>
             </dl>
-    
+
             <section className="detail-section" aria-labelledby="upcoming-heading">
               <h2 id="upcoming-heading">Coming up</h2>
               {upcoming.length === 0 ? (
@@ -112,7 +113,7 @@ export default function ProfilePage() {
                 </ul>
               )}
             </section>
-    
+
             <section className="detail-section" aria-labelledby="votes-heading">
               <h2 id="votes-heading">Your votes</h2>
               {votes.length === 0 ? (
@@ -137,10 +138,10 @@ export default function ProfilePage() {
                 </ul>
               )}
             </section>
-    
+
             <section className="detail-section" aria-labelledby="hours-heading">
               <h2 id="hours-heading">Volunteer hours</h2>
-    
+
               {historyError && (
                 <p className="form-error" role="alert">
                   <TriangleAlert size={16} aria-hidden="true" />
@@ -156,9 +157,9 @@ export default function ProfilePage() {
                   </button>
                 </p>
               )}
-    
+
               {history && history.length === 0 && <p className="muted">Hours show up here after an event you joined is marked done.</p>}
-    
+
               {history && history.length > 0 && (
                 <>
                   <ul className="plain-list">

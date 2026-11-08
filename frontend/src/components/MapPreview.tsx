@@ -1,9 +1,13 @@
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { useEffect, useRef, type ReactElement } from 'react'
+import { useIsDark } from '../lib/theme'
 
-// OpenFreeMap: free, no API key. "positron" is the plain grey style.
-const STYLE_URL = 'https://tiles.openfreemap.org/styles/positron'
+// Match the map to the selected appearance.
+const STYLES = {
+  light: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
+  dark: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+}
 
 interface Props {
   lat: number
@@ -14,6 +18,7 @@ interface Props {
 
 export default function MapPreview({ lat, lng, label, onFail }: Props): ReactElement | null {
   const ref = useRef<HTMLDivElement>(null)
+  const dark = useIsDark()
 
   useEffect(() => {
     if (!ref.current) return
@@ -21,10 +26,10 @@ export default function MapPreview({ lat, lng, label, onFail }: Props): ReactEle
     try {
       map = new maplibregl.Map({
         container: ref.current,
-        style: STYLE_URL,
+        style: dark ? STYLES.dark : STYLES.light,
         center: [lng, lat],
         zoom: 15,
-        interactive: false, // a preview; "Directions" opens a real map app
+        interactive: true,
         attributionControl: { compact: true },
       })
     } catch {
@@ -38,15 +43,21 @@ export default function MapPreview({ lat, lng, label, onFail }: Props): ReactEle
     map.once('load', () => {
       loaded = true
       clearTimeout(timer)
+      // MapLibre initially expands compact attribution; start with just its info button.
+      const attribution = map.getContainer().querySelector<HTMLDetailsElement>('.maplibregl-ctrl-attrib.maplibregl-compact')
+      attribution?.classList.remove('maplibregl-compact-show')
+      attribution?.removeAttribute('open')
     })
     map.on('error', () => !loaded && onFail())
 
-    new maplibregl.Marker({ color: '#13293d' }).setLngLat([lng, lat]).addTo(map)
+    map.scrollZoom.disable()
+    map.addControl(new maplibregl.NavigationControl(), 'top-right')
+    new maplibregl.Marker({ color: '#2563eb' }).setLngLat([lng, lat]).addTo(map)
     return () => {
       clearTimeout(timer)
       map.remove()
     }
-  }, [lat, lng, onFail])
+  }, [lat, lng, onFail, dark])
 
-  return <div ref={ref} className="map-preview" role="img" aria-label={`Map showing ${label}`} />
+  return <div ref={ref} className="map-preview" role="region" aria-label={`Interactive map showing ${label}`} />
 }

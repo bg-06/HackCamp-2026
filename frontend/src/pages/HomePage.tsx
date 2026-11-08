@@ -1,4 +1,4 @@
-import { ChevronDown, LocateFixed, TriangleAlert } from "lucide-react";
+import { LocateFixed, TriangleAlert } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { USE_MOCK } from "../api/client";
@@ -8,7 +8,7 @@ import VotesLeft from "../components/VotesLeft";
 import MasonryFeed from "../components/MasonryFeed";
 import TopBar from "../components/TopBar";
 import { coverRatio } from "../lib/cover";
-import { describeReports, mergeNeighbours, spreadByArea } from "../lib/hotspots";
+import { mergeNeighbours, spreadByArea } from "../lib/hotspots";
 import { CITY, distanceTo, formatKm } from "../lib/geo";
 import { issueScore, VAN311_URL } from "../lib/issues";
 import { EVENT_SORTS, ISSUE_SORTS, sortEvents, sortIssues } from "../lib/sort";
@@ -135,7 +135,6 @@ export default function HomePage() {
     eventSort,
     ctx,
   );
-  const totalVotes = (issues.items ?? []).reduce((n, i) => n + issueScore(i).up, 0);
 
   // Spots that keep getting reported and have nothing planned yet
   const planned = new Set((events.items ?? []).map((e) => e.hotspotId).filter(Boolean));
@@ -187,30 +186,13 @@ export default function HomePage() {
   }
 
   const locationNote = LOCATION_NOTES[locStatus];
-  const sortLabel = sorts.find((s) => s.key === sort)?.label ?? "For you";
 
   return (
     <div className="page">
       <header className={`home-header track-${tab}`}>
-        <TopBar title={tab === "volunteer" ? "Volunteer" : "Issues"} searchOpen={searchOpen[tab]} onToggleSearch={toggleSearch} />
+        <TopBar tab={tab} searchOpen={searchOpen[tab]} onToggleSearch={toggleSearch} menuOpen={sortOpen} onToggleMenu={() => setSortOpen(!sortOpen)} />
 
-        <div className="control-row">
-          <button
-            className={`control-pill ${here ? "on" : ""}`}
-            aria-pressed={Boolean(here)}
-            onClick={toggleNearMe}
-            disabled={locStatus === "locating"}
-          >
-            <LocateFixed size={16} aria-hidden="true" />
-            Near me
-          </button>
-          <button className="control-pill" aria-expanded={sortOpen} onClick={() => setSortOpen(!sortOpen)}>
-            Sort: {sortLabel}
-            <ChevronDown size={16} aria-hidden="true" />
-          </button>
-        </div>
-
-        {tab === 'issues' && <div className="filter-row">
+        {tab === 'issues' && <div className="filter-row issue-filters">
           <label>Neighbourhood <select value={area} onChange={e => { setArea(e.target.value); localStorage.setItem('issue-area', e.target.value) }}>
             <option value="">All Vancouver</option>
             {[...new Set((issues.items ?? []).map(i => i.local_area).filter(Boolean))].sort().map(a => <option key={a} value={a}>{a}</option>)}
@@ -224,6 +206,10 @@ export default function HomePage() {
 
         {sortOpen && (
           <div className="filter-row" role="group" aria-label="Sort by">
+            <button className={`filter-chip ${here ? "selected" : ""}`} aria-pressed={Boolean(here)} onClick={toggleNearMe} disabled={locStatus === "locating"}>
+              <LocateFixed size={14} aria-hidden="true" /> Near me
+            </button>
+            <span className="filter-divider" aria-hidden="true" />
             {sorts.map((s) => (
               <button
                 key={s.key}
@@ -283,13 +269,9 @@ export default function HomePage() {
         ) : (
           <section className="intro">
             <h2>What needs fixing in {CITY.name}</h2>
-            <p>
-              Only the City can fix these. Vote for the ones that affect you.
-              {issues.items && ` ${totalVotes} ${totalVotes === 1 ? "vote" : "votes"} so far.`}
-            </p>
+            <p>Prioritize issues the City can fix.</p>
             <VotesLeft />
-            <p className="muted small">Choose a neighbourhood or turn on Near me. For you uses your votes and volunteer interests; Recent activity counts votes and comments from the past 7 days.</p>
-            <p className="muted small">The number is a priority score: votes, plus how long it's been open and how often it's reported.</p>
+            <p className="muted small">Filter by neighbourhood or turn on Near me. The number is a priority score: votes, plus how long it’s been open and how often it’s reported.</p>
             <a className="text-link" href={VAN311_URL} target="_blank" rel="noopener noreferrer">
               Report something new in Van311 ↗
             </a>
@@ -298,38 +280,48 @@ export default function HomePage() {
 
         {tab === "volunteer" && openHotspots.length > 0 && (
           <section className="needs-help" aria-labelledby="needs-help-heading">
-            <h2 id="needs-help-heading">Needs help</h2>
-            <p className="muted small">Spots that keep getting reported, with nothing planned yet.</p>
-            <ul className="plain-list">
-              {hotspotsShown.map((p) => (
-                <li key={p.id} className="help-row">
-                  <span>
-                    <span className="row-title">{p.label}</span>
-                    <span className="muted small">
-                      {p.hotspot.near ?? p.hotspot.local_area} · {describeReports(p.reports, p.monthsSeen)}
-                      {here && p.hotspot.lat !== undefined && ` · ${formatKm(distanceTo(here, p.hotspot)!)}`}
+            <div className="needs-help-head">
+              <h2 id="needs-help-heading">Needs help</h2>
+              <p className="muted small">{openHotspots.length} reported spots, nothing planned</p>
+            </div>
+            <ul className="help-strip" tabIndex={0} aria-label="Spots that need help">
+              {hotspotsShown.map((p) => {
+                const report = p.action === "report";
+                const body = (
+                  <>
+                    <span className="help-card-top">
+                      <span className="help-count">{p.reports} reports</span>
+                      {here && p.hotspot.lat !== undefined && <span className="muted small">{formatKm(distanceTo(here, p.hotspot)!)}</span>}
                     </span>
-                    {p.action === "report" && (
-                      <span className="muted small">Needs a City pickup. Some things left out may belong to someone.</span>
+                    <span className="row-title">{p.label}</span>
+                    <span className="muted small">{p.hotspot.near ?? p.hotspot.local_area} · {p.monthsSeen} of 12 months</span>
+                    <span className="help-start">
+                      {report ? "Report to the City" : p.action === "walk" ? "Plan a walk" : "Start a cleanup"} <span aria-hidden="true">{report ? "↗" : "→"}</span>
+                    </span>
+                  </>
+                );
+                return (
+                  <li key={p.id} className="help-card">
+                    {report ? (
+                      <a className="help-card-link" href={VAN311_URL} target="_blank" rel="noopener noreferrer">
+                        {body}
+                      </a>
+                    ) : (
+                      <Link className="help-card-link" to={`/volunteer/new?hotspot=${encodeURIComponent(p.id)}`}>
+                        {body}
+                      </Link>
                     )}
-                  </span>
-                  {p.action === "report" ? (
-                    <a className="chip-button" href={VAN311_URL} target="_blank" rel="noopener noreferrer">
-                      Report ↗
-                    </a>
-                  ) : (
-                    <Link className="chip-button" to={`/volunteer/new?hotspot=${encodeURIComponent(p.id)}`}>
-                      {p.action === "walk" ? "Plan a walk" : "Start a cleanup"}
-                    </Link>
-                  )}
+                  </li>
+                );
+              })}
+              {!showAllHotspots && openHotspots.length > hotspotsShown.length && (
+                <li className="help-card help-more">
+                  <button className="chip-button" onClick={() => setShowAllHotspots(true)}>
+                    Show all {openHotspots.length}
+                  </button>
                 </li>
-              ))}
+              )}
             </ul>
-            {openHotspots.length > 3 && (
-              <button className="link-button small" onClick={() => setShowAllHotspots(!showAllHotspots)}>
-                {showAllHotspots ? "Show fewer" : `Show all ${openHotspots.length}`}
-              </button>
-            )}
           </section>
         )}
 

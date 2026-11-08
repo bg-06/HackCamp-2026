@@ -132,9 +132,9 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
   const tap = (key: string) => (lastTap.current[key] = (lastTap.current[key] ?? 0) + 1);
 
   const setMyVote = useCallback(
-    (issueId: string, value: Vote) => {
+    (issueId: string, value: Vote, issue?: Track2Issue) => {
       const selected = issues.items?.filter(i => i.my_vote === 1) ?? [];
-      const target = issues.items?.find(i => i.issue_id === issueId);
+      const target = issues.items?.find(i => i.issue_id === issueId) ?? issue;
       if (value === 1 && voteBudget?.votesRemaining === 0 && target && selected.length === 2 && !selected.some(i => i.issue_id === issueId)) {
         setComparison([selected[0], selected[1], target]);
         return Promise.resolve(false);
@@ -262,7 +262,10 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
         try {
           const seq = ++budgetSeq.current;
           const budget = await swapVote(comparison[2].issue_id, removeId, comparison.slice(0, 2).map(i => i.issue_id));
-          setIssues(prev => ({ ...prev, items: prev.items?.map(i => i.issue_id === removeId ? { ...i, my_vote: 0 } : i.issue_id === comparison[2].issue_id ? { ...i, my_vote: 1 } : i) }));
+          setIssues(prev => {
+            const items = prev.items?.map(i => i.issue_id === removeId ? { ...i, my_vote: 0 as const } : i.issue_id === comparison[2].issue_id ? { ...i, my_vote: 1 as const } : i);
+            return { ...prev, items: items && !items.some(i => i.issue_id === comparison[2].issue_id) ? [...items, { ...comparison[2], my_vote: 1 }] : items };
+          });
           if (seq === budgetSeq.current) setVoteBudget(budget);
           setComparison(null);
           return true;

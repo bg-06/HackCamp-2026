@@ -23,16 +23,18 @@ export default function VolunteerCard({ event }: { event: VolunteerEvent }) {
     <article className="detail">
       {event.photoUrl && <img className="detail-photo" src={event.photoUrl} alt="" />}
 
-      <p className="eyebrow">
-        {KIND_LABELS[event.kind].label}
-        {event.sample && ' · Sample listing'}
-      </p>
+      {(event.kind !== 'org' || event.sample) && <p className="eyebrow">
+        {event.kind !== 'org' && KIND_LABELS[event.kind].label}
+        {event.sample && `${event.kind !== 'org' ? ' · ' : ''}Sample listing`}
+      </p>}
       <h1>{event.title}</h1>
       <p className="muted">{event.organiser}</p>
 
       <dl className="facts">
         <dt>When</dt>
         <dd>{formatWhen(event.startsAt, event.endsAt)}</dd>
+        <dt>Where</dt>
+        <dd>{event.location}{event.localArea ? `, ${event.localArea}` : ''}</dd>
         {event.whatToBring && (
           <>
             <dt>Bring</dt>

@@ -111,7 +111,7 @@ export async function getHelpHotspots(): Promise<HelpHotspot[]> {
 
 /** Start an event, usually from a hotspot. The signed-in user is the host. */
 export async function createEvent(input: NewEvent): Promise<VolunteerEvent> {
-  if (USE_MOCK) {
+  if (USE_MOCK && !input.suggestionId) {
     await wait(300);
     const e: VolunteerEvent = {
       ...input,

@@ -125,3 +125,9 @@ All data goes through `src/api/client.ts`. Pages never fetch on their own.
 
 Signing up, voting, commenting and starting an event need sign-in. The author of a comment must come from the session on the
 server, never from the request body. Comments are plain text; the page never renders HTML from them.
+
+The movable-vote UI requires the matching API and migration `009_active_vote_limit.sql`. That migration removes older active votes for accounts with more than two; review and coordinate it before running it against a shared database.
+
+## Installed app
+
+The manifest supplies standalone display, app icons and a start URL. Production builds register a service worker that displays a basic offline page when navigation fails. It does not cache API responses or account data; an active connection is needed for current content and voting. Installability requires HTTPS in deployment (localhost is also supported); installation behavior varies by browser and device. The service worker is disabled in the Vite development server.

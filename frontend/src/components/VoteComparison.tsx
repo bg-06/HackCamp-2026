@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
+import { ArrowRight, X } from 'lucide-react'
 import type { Track2Issue } from '../types'
 
 type Props = { choices: [Track2Issue, Track2Issue, Track2Issue]; onClose: () => void; onConfirm: (removeId: string) => Promise<boolean> }
+
+const label = (i: Track2Issue) => `${i.request_type.replace(/ Case$/, '')} (${i.address ?? i.local_area})`
 
 export default function VoteComparison({ choices, onClose, onConfirm }: Props) {
   const [firstLoser, setFirstLoser] = useState<Track2Issue | null>(null)
@@ -9,14 +12,23 @@ export default function VoteComparison({ choices, onClose, onConfirm }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(false)
   const dialog = useRef<HTMLDivElement>(null)
+  const busyRef = useRef(busy)
+  useEffect(() => { busyRef.current = busy }, [busy])
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null
     dialog.current?.focus()
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !busyRef.current) { onClose(); return }
+      if (e.key !== 'Tab' || !dialog.current) return
+      const controls = Array.from(dialog.current.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), a[href], [tabindex="0"]'))
+      if (!controls.length) { e.preventDefault(); dialog.current.focus(); return }
+      const first = controls[0], last = controls[controls.length - 1]
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === dialog.current)) { e.preventDefault(); last.focus() }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
+    }
     window.addEventListener('keydown', key)
     return () => { window.removeEventListener('keydown', key); previous?.focus() }
   }, [onClose])
-  const label = (i: Track2Issue) => `${i.request_type.replace(/ Case$/, '')} — ${i.address ?? i.local_area}`
   const pair = firstLoser ? [firstLoser, choices[2]] : choices.slice(0, 2)
   async function confirm() {
     if (!removeId) return
@@ -24,25 +36,30 @@ export default function VoteComparison({ choices, onClose, onConfirm }: Props) {
     setBusy(true)
     if (!(await onConfirm(removeId))) { setError(true); setBusy(false) }
   }
-  return <div className="sheet-backdrop" onClick={onClose}>
-    <div ref={dialog} tabIndex={-1} className="sheet" role="dialog" aria-modal="true" aria-labelledby="compare-title" onClick={e => e.stopPropagation()}>
-      <h2 id="compare-title" className="sheet-title">Choose your priorities</h2>
+  return <div className="sheet-backdrop" onClick={() => !busy && onClose()}>
+    <div ref={dialog} tabIndex={-1} className="sheet comparison-sheet" role="dialog" aria-modal="true" aria-labelledby="compare-title" onClick={e => e.stopPropagation()}>
+      <div className="comparison-header">
+        <div><p className="comparison-kicker">YOUR VOTES</p><h2 id="compare-title" className="sheet-title">Choose your priorities</h2></div>
+        <button className="icon-button" type="button" disabled={busy} onClick={onClose} aria-label="Close comparison"><X size={22} /></button>
+      </div>
       {!removeId ? <>
-        <p>You can prioritize two issues. Which is more pressing to you? {firstLoser ? '(2 of 2)' : '(1 of 2)'}</p>
-        <div className="sheet-actions">{pair.map((item, index) => <button key={item.issue_id} className="action-button secondary" onClick={() => {
+        <p className="comparison-intro">You've used both votes. To vote for <strong>{label(choices[2])}</strong>, pick the issue that matters more in each pair.</p>
+        <p className="comparison-step">Comparison {firstLoser ? '2' : '1'} of 2</p>
+        <div className="comparison-choices">{pair.map((item, index) => <button key={item.issue_id} className="comparison-choice" onClick={() => {
           const loser = pair[1 - index]
           if (firstLoser) setRemoveId(loser.issue_id); else setFirstLoser(loser)
-        }}>{label(item)}</button>)}</div>
-        <button className="link-button" onClick={() => setRemoveId(choices[2].issue_id)}>Choose directly instead</button>
+        }}><span><strong>{item.request_type.replace(/ Case$/, '')}</strong><span className="comparison-place">{item.address ?? item.local_area}{item.issue_id === choices[2].issue_id ? ' · New choice' : ''}</span></span><ArrowRight size={20} aria-hidden="true" /></button>)}</div>
       </> : <>
-        <p>Choose the issue to remove. The other two will keep your votes.</p>
-        {choices.map(i => <label key={i.issue_id} style={{ display: 'block', margin: '12px 0' }}>
-          <input type="radio" name="remove-vote" checked={removeId === i.issue_id} onChange={() => setRemoveId(i.issue_id)} /> {label(i)}{i.issue_id === choices[2].issue_id ? ' (new choice)' : ''}
-        </label>)}
-        {error && <p className="form-error" role="alert">Your votes may have changed or the request failed. Close this and try again.</p>}
-        <button className="action-button" disabled={busy} onClick={confirm}>Confirm choices</button>
+        <p className="comparison-intro">Review which issue will be removed. The other two will keep your votes.</p>
+        <fieldset className="comparison-review"><legend>Remove vote from</legend>
+        {choices.map(i => <label className="comparison-option" key={i.issue_id}>
+          <input type="radio" name="remove-vote" checked={removeId === i.issue_id} onChange={() => setRemoveId(i.issue_id)} />
+          <span><strong>{i.request_type.replace(/ Case$/, '')}</strong><span className="comparison-place">{i.address ?? i.local_area}{i.issue_id === choices[2].issue_id ? ' · New choice' : ''}</span></span>
+        </label>)}</fieldset>
+        {error && <p className="form-error" role="alert">Your votes changed or the request failed, so nothing was swapped. Close this, then tap the issue again.</p>}
+        <button className="action-button" disabled={busy} onClick={confirm}>{removeId === choices[2].issue_id ? 'Keep my current votes' : 'Confirm swap'}</button>
       </>}
-      <button className="action-button secondary" disabled={busy} onClick={onClose}>Cancel</button>
+      <button className="comparison-cancel" disabled={busy} onClick={onClose}>Cancel</button>
     </div>
   </div>
 }

@@ -5,9 +5,13 @@ import HomePage from './pages/HomePage'
 import IssuePage from './pages/IssuePage'
 import NewEventPage from './pages/NewEventPage'
 import ProfilePage from './pages/ProfilePage'
+import SuggestionProfilePage from './pages/SuggestionProfilePage'
+import SettingsPage from './pages/SettingsPage'
+import AgentPage from './pages/AgentPage'
+import { getProfileDesign } from './lib/profileDesign'
+import './profile-suggestion.css'
 import VolunteerPage from './pages/VolunteerPage'
 import FeedProvider from './state/FeedProvider'
-import AgentPage from './pages/AgentPage'
 
 // Keyed by id: going from one card's page to another starts fresh, with nothing left over from the last one.
 function VolunteerRoute() {
@@ -17,6 +21,9 @@ function VolunteerRoute() {
 function IssueRoute() {
   const { id = '' } = useParams()
   return <IssuePage key={id} />
+}
+function ProfileRoute() {
+  return getProfileDesign() === 'suggestion' ? <SuggestionProfilePage /> : <ProfilePage />
 }
 
 // Old links (/events/:id, /fix) still work.
@@ -38,7 +45,8 @@ export default function App() {
           <Route path="/issues/:id" element={<IssueRoute />} />
           <Route path="/events/:id" element={<OldEventLink />} />
           <Route path="/fix" element={<Navigate to="/issues" replace />} />
-          <Route path="/me" element={<ProfilePage />} />
+          <Route path="/me" element={<ProfileRoute />} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="/community-updates" element={<AgentPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
