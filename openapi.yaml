@@ -1,0 +1,257 @@
+openapi: 3.1.0
+info:
+  title: Block by Block API
+  version: 1.0.0
+  description: |
+    Volunteer events, city issues, RSVPs, votes and comments. The optional
+    x-demo-user header selects the caller and defaults to demo-user. This is a
+    temporary identity mechanism, not authentication. Database failures return 500.
+servers:
+  - url: http://localhost:8000
+    description: Local API
+  - url: /api
+    description: Vite development proxy
+paths:
+  /health:
+    get:
+      summary: Check API and database connectivity
+      responses:
+        '200':
+          description: Database is reachable
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: {type: boolean, const: true}
+        '500': {$ref: '#/components/responses/ServerError'}
+  /events:
+    parameters: [{$ref: '#/components/parameters/DemoUser'}]
+    get:
+      summary: List upcoming events
+      description: Events starting from one day ago onward, ordered by start time. Undated events are excluded.
+      responses:
+        '200':
+          description: Events
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Event'}}
+        '500': {$ref: '#/components/responses/ServerError'}
+  /events/{id}:
+    parameters: [{$ref: '#/components/parameters/Id'}, {$ref: '#/components/parameters/DemoUser'}]
+    get:
+      summary: Get an event
+      responses:
+        '200':
+          description: Event
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Event'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/ServerError'}
+  /events/{id}/rsvp:
+    parameters: [{$ref: '#/components/parameters/Id'}, {$ref: '#/components/parameters/DemoUser'}]
+    post:
+      summary: RSVP to an in-app event
+      description: Idempotent for an existing RSVP. Events without capacity use an external signup site.
+      responses:
+        '204': {description: RSVP recorded}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: Event is full or uses an external signup site
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '500': {$ref: '#/components/responses/ServerError'}
+    delete:
+      summary: Remove your RSVP
+      description: Succeeds even if no RSVP exists.
+      responses:
+        '204': {description: RSVP removed}
+        '500': {$ref: '#/components/responses/ServerError'}
+  /issues:
+    parameters: [{$ref: '#/components/parameters/DemoUser'}]
+    get:
+      summary: List issues ordered by base score, highest first
+      parameters:
+        - name: area
+          in: query
+          description: Exact local area name
+          schema: {type: string}
+        - name: limit
+          in: query
+          description: Maximum results; clamped to 1–5000, default 5000.
+          schema: {type: integer, minimum: 1, maximum: 5000, default: 5000}
+      responses:
+        '200':
+          description: Issues
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Issue'}}
+        '500': {$ref: '#/components/responses/ServerError'}
+  /issues/{id}:
+    parameters: [{$ref: '#/components/parameters/Id'}, {$ref: '#/components/parameters/DemoUser'}]
+    get:
+      summary: Get an issue
+      responses:
+        '200':
+          description: Issue
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Issue'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/ServerError'}
+  /issues/{id}/vote:
+    parameters: [{$ref: '#/components/parameters/Id'}, {$ref: '#/components/parameters/DemoUser'}]
+    put:
+      summary: Set your vote
+      description: Replaces any existing vote for this user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value: {type: integer, enum: [-1, 1]}
+      responses:
+        '204': {description: Vote recorded}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/ServerError'}
+    delete:
+      summary: Remove your vote
+      description: Succeeds even if no vote exists.
+      responses:
+        '204': {description: Vote removed}
+        '500': {$ref: '#/components/responses/ServerError'}
+  /events/{id}/comments:
+    parameters: [{$ref: '#/components/parameters/Id'}, {$ref: '#/components/parameters/DemoUser'}]
+    get: &commentsGet
+      summary: List visible comments, oldest first
+      description: Returns an empty list if no comments exist.
+      responses:
+        '200':
+          description: Comments
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Comment'}}
+        '500': {$ref: '#/components/responses/ServerError'}
+    post: &commentsPost
+      summary: Add a comment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body:
+                  type: string
+                  minLength: 1
+                  maxLength: 2000
+                  description: Trimmed before validation and storage; must contain 1–2000 characters after trimming.
+      responses:
+        '201':
+          description: Comment created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Comment'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/ServerError'}
+  /issues/{id}/comments:
+    parameters: [{$ref: '#/components/parameters/Id'}, {$ref: '#/components/parameters/DemoUser'}]
+    get: *commentsGet
+    post: *commentsPost
+components:
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      description: Event or issue identifier
+      schema: {type: string}
+    DemoUser:
+      name: x-demo-user
+      in: header
+      description: Temporary caller ID, not an authentication mechanism.
+      schema: {type: string, default: demo-user}
+  responses:
+    BadRequest:
+      description: Invalid request
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    NotFound:
+      description: Target not found
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    ServerError:
+      description: Internal server error
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: {type: string}
+    Event:
+      type: object
+      required: [id, kind, title, organiser, category, startsAt, endsAt, location, localArea, sample, going]
+      properties:
+        id: {type: string}
+        kind: {type: string}
+        title: {type: string}
+        organiser: {type: string}
+        category: {type: string}
+        startsAt: {type: string, format: date-time}
+        endsAt: {type: string, format: date-time}
+        location: {type: string}
+        localArea: {type: string}
+        spotsTotal: {type: integer}
+        spotsTaken: {type: integer, description: RSVPs by other users; excludes the caller.}
+        whatToBring: {type: string}
+        signupUrl: {type: string}
+        hotspot:
+          type: object
+          required: [requestType, timesReported, monthsSeen]
+          properties:
+            requestType: {type: string}
+            timesReported: {type: integer}
+            monthsSeen: {type: integer}
+        sample: {type: boolean}
+        lat: {type: number}
+        lng: {type: number}
+        createdAt: {type: string, format: date-time}
+        going: {type: boolean, description: Whether the caller has RSVP'd.}
+    Issue:
+      type: object
+      required: [issue_id, h3_r9, request_type, category, local_area, address, open_cases, days_open, times_reported_12m, base_score, up_votes, down_votes, my_vote]
+      properties:
+        issue_id: {type: string}
+        h3_r9: {type: string}
+        request_type: {type: string}
+        category: {type: string}
+        local_area: {type: string}
+        address: {type: [string, 'null']}
+        open_cases: {type: integer}
+        days_open: {type: integer}
+        times_reported_12m: {type: integer}
+        base_score: {type: number}
+        up_votes: {type: integer, description: Upvotes excluding the caller's vote.}
+        down_votes: {type: integer, description: Downvotes excluding the caller's vote.}
+        my_vote: {type: integer, enum: [-1, 0, 1]}
+        lat: {type: number}
+        lng: {type: number}
+    Comment:
+      type: object
+      required: [id, targetType, targetId, body, author, authorKind, createdAt]
+      properties:
+        id: {type: string}
+        targetType: {type: string, enum: [event, issue]}
+        targetId: {type: string}
+        body: {type: string}
+        author: {type: string}
+        authorKind: {type: string, const: resident}
+        createdAt: {type: string, format: date-time}
