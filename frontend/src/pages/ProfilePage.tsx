@@ -109,8 +109,8 @@ export default function ProfilePage() {
                   {votes.map((i) => (
                     <li key={i.issue_id}>
                       <Link className="row-link with-mark" to={`/issues/${encodeURIComponent(i.issue_id)}`}>
-                        <span className={`vote-mark ${i.my_vote === 1 ? "up" : "down"}`} aria-label={i.my_vote === 1 ? "Voted pressing" : "Voted not a problem"}>
-                          {i.my_vote === 1 ? "▲" : "▼"}
+                        <span className="vote-mark up" aria-label="Voted pressing">
+                          ▲
                         </span>
                         <span>
                           <span className="row-title">{i.request_type.replace(/ Case$/, "")}</span>

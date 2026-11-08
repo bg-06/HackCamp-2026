@@ -49,7 +49,6 @@ export interface Track2Issue {
   times_reported_12m: number
   base_score: number // from City data only (age + recurrence)
   up_votes: number // everyone's votes, not counting the current user's
-  down_votes: number
   my_vote: Vote // the current user's vote
   lat?: number // centre of the H3 cell
   lng?: number
@@ -89,7 +88,16 @@ export interface NewEvent {
   hotspot?: VolunteerEvent['hotspot']
 }
 
-export type Vote = -1 | 0 | 1
+export type Vote = 0 | 1 // up votes only
+
+// Each person gets 2 new votes per Vancouver day. Taking one back doesn't give it back.
+export interface VoteBudget {
+  dailyLimit: number
+  votesUsed: number
+  votesRemaining: number
+  voteDate: string // YYYY-MM-DD in Vancouver
+  resetsAt: string
+}
 
 // Home sort options. "longest" (open the longest) is Issues only.
 export type SortKey = 'recommended' | 'newest' | 'popular' | 'distance' | 'longest'

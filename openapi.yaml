@@ -30,13 +30,93 @@ paths:
     parameters: [{$ref: '#/components/parameters/DemoUser'}]
     get:
       summary: List upcoming events
-      description: Events starting from one day ago onward, ordered by start time. Undated events are excluded.
+      description: Active, incomplete upcoming events plus supported ongoing external opportunities, ordered by start time.
       responses:
         '200':
           description: Events
           content:
             application/json:
               schema: {type: array, items: {$ref: '#/components/schemas/Event'}}
+        '500': {$ref: '#/components/responses/ServerError'}
+    post:
+      summary: Create an in-app volunteer event and RSVP its host
+      description: Hotspot location/category are authoritative when hotspotId is supplied. Manual events require Vancouver coordinates, a known category and local area. Caller identity determines the host.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/NewEvent'}
+      responses:
+        '201':
+          description: Created event; the host is already going
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Event'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {description: Hotspot has unusable location/category data}
+        '500': {$ref: '#/components/responses/ServerError'}
+  /hotspots:
+    get:
+      summary: List recurring Track 1 hotspots
+      parameters:
+        - {name: area, in: query, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 5000, default: 5000}}
+      responses:
+        '200':
+          description: Most reported first, with H3 cell centres
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/HelpHotspot'}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '500': {$ref: '#/components/responses/ServerError'}
+  /me/votes:
+    parameters: [{$ref: '#/components/parameters/DemoUser'}]
+    get:
+      summary: Get remaining votes for the caller's Vancouver calendar day
+      responses:
+        '200':
+          description: Daily allowance and next reset instant
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VoteBudget'}
+        '500': {$ref: '#/components/responses/ServerError'}
+  /me/history:
+    parameters: [{$ref: '#/components/parameters/DemoUser'}]
+    get:
+      summary: List completed events the caller RSVP'd to
+      description: Hours are duration estimates capped at completion time, not verified attendance. Future and incomplete events do not earn hours.
+      responses:
+        '200':
+          description: Completed event history, newest first
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/VolunteerRecord'}}
+        '500': {$ref: '#/components/responses/ServerError'}
+  /events/{id}/done:
+    parameters: [{$ref: '#/components/parameters/Id'}, {$ref: '#/components/parameters/DemoUser'}]
+    post:
+      summary: Complete an in-app event as its host
+      description: Uses server completion time; cannot complete an event before it starts. Repeats retain the original completion and counts. Databricks picks this up on its scheduled refresh.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                peopleCount: {type: integer, minimum: 0, maximum: 10000}
+                bagsCollected: {type: integer, minimum: 0, maximum: 10000}
+                afterPhotoUrl: {type: string, format: uri, description: HTTPS only}
+      responses:
+        '200':
+          description: Completed event
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Event'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {description: Caller is not the host}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {description: Event has not started, is withdrawn, or is external}
         '500': {$ref: '#/components/responses/ServerError'}
   /events/{id}:
     parameters: [{$ref: '#/components/parameters/Id'}, {$ref: '#/components/parameters/DemoUser'}]
@@ -54,7 +134,7 @@ paths:
     parameters: [{$ref: '#/components/parameters/Id'}, {$ref: '#/components/parameters/DemoUser'}]
     post:
       summary: RSVP to an in-app event
-      description: Idempotent for an existing RSVP. Events without capacity use an external signup site.
+      description: Idempotent for an existing RSVP. Events without capacity use an external signup site. Completed/withdrawn events reject new RSVPs and cannot be overbooked by parallel requests.
       responses:
         '204': {description: RSVP recorded}
         '404': {$ref: '#/components/responses/NotFound'}
@@ -66,14 +146,15 @@ paths:
         '500': {$ref: '#/components/responses/ServerError'}
     delete:
       summary: Remove your RSVP
-      description: Succeeds even if no RSVP exists.
+      description: Succeeds even if no RSVP exists. Completed-event attendance is retained and returns 409.
       responses:
         '204': {description: RSVP removed}
+        '409': {description: Completed event attendance cannot be removed}
         '500': {$ref: '#/components/responses/ServerError'}
   /issues:
     parameters: [{$ref: '#/components/parameters/DemoUser'}]
     get:
-      summary: List issues ordered by base score, highest first
+      summary: List issues ordered by base score plus three times all upvotes
       parameters:
         - name: area
           in: query
@@ -105,8 +186,8 @@ paths:
   /issues/{id}/vote:
     parameters: [{$ref: '#/components/parameters/Id'}, {$ref: '#/components/parameters/DemoUser'}]
     put:
-      summary: Set your vote
-      description: Replaces any existing vote for this user.
+      summary: Upvote an issue
+      description: Two new casts per user per Vancouver calendar day. Repeating an active upvote is idempotent. Removing and recasting consumes another allowance.
       requestBody:
         required: true
         content:
@@ -115,17 +196,31 @@ paths:
               type: object
               required: [value]
               properties:
-                value: {type: integer, enum: [-1, 1]}
+                value: {type: integer, const: 1}
       responses:
-        '204': {description: Vote recorded}
+        '200':
+          description: Vote recorded, with remaining daily allowance
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VoteResult'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '429':
+          description: Daily vote limit reached; includes code DAILY_VOTE_LIMIT and the current VoteBudget fields
+          content:
+            application/json:
+              schema:
+                allOf: [{$ref: '#/components/schemas/Error'}, {$ref: '#/components/schemas/VoteBudget'}]
         '500': {$ref: '#/components/responses/ServerError'}
     delete:
       summary: Remove your vote
-      description: Succeeds even if no vote exists.
+      description: Succeeds even if no vote exists. Removing never refunds the daily allowance.
       responses:
-        '204': {description: Vote removed}
+        '200':
+          description: Vote removed, with unchanged daily allowance
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VoteResult'}
         '500': {$ref: '#/components/responses/ServerError'}
   /events/{id}/comments:
     parameters: [{$ref: '#/components/parameters/Id'}, {$ref: '#/components/parameters/DemoUser'}]
@@ -205,8 +300,8 @@ components:
         title: {type: string}
         organiser: {type: string}
         category: {type: string}
-        startsAt: {type: string, format: date-time}
-        endsAt: {type: string, format: date-time}
+        startsAt: {type: [string, 'null'], format: date-time}
+        endsAt: {type: [string, 'null'], format: date-time}
         location: {type: string}
         localArea: {type: string}
         spotsTotal: {type: integer}
@@ -225,6 +320,11 @@ components:
         lng: {type: number}
         createdAt: {type: string, format: date-time}
         going: {type: boolean, description: Whether the caller has RSVP'd.}
+        hotspotId: {type: string}
+        createdBy: {type: string, description: Server-selected host identity}
+        doneAt: {type: string, format: date-time}
+        commentCount: {type: integer}
+        withdrawn: {type: boolean}
     Issue:
       type: object
       required: [issue_id, h3_r9, request_type, category, local_area, address, open_cases, days_open, times_reported_12m, base_score, up_votes, down_votes, my_vote]
@@ -240,10 +340,70 @@ components:
         times_reported_12m: {type: integer}
         base_score: {type: number}
         up_votes: {type: integer, description: Upvotes excluding the caller's vote.}
-        down_votes: {type: integer, description: Downvotes excluding the caller's vote.}
-        my_vote: {type: integer, enum: [-1, 0, 1]}
+        down_votes: {type: integer, const: 0, description: Compatibility field; legacy downvotes are ignored.}
+        my_vote: {type: integer, enum: [0, 1]}
+        score: {type: number, description: base_score plus 3 times all upvotes, including the caller}
+        comment_count: {type: integer}
         lat: {type: number}
         lng: {type: number}
+    NewEvent:
+      type: object
+      required: [title, startsAt, endsAt, location, spotsTotal]
+      anyOf:
+        - required: [hotspotId]
+        - required: [category, localArea, lat, lng]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 120}
+        location: {type: string, minLength: 1, maxLength: 120}
+        startsAt: {type: string, format: date-time, description: Future ISO timestamp with explicit timezone}
+        endsAt: {type: string, format: date-time, description: Must be after startsAt}
+        spotsTotal: {type: integer, minimum: 1, maximum: 100}
+        hotspotId: {type: string, description: Canonical h3_r9|request_type ID; legacy colon separator also accepted}
+        whatToBring: {type: string, maxLength: 1000}
+        category: {type: string}
+        localArea: {type: string}
+        lat: {type: number}
+        lng: {type: number}
+    HelpHotspot:
+      type: object
+      required: [id, h3_r9, request_type, category, local_area, times_reported, months_seen]
+      properties:
+        id: {type: string, description: h3_r9 followed by a pipe and request_type}
+        h3_r9: {type: string}
+        request_type: {type: string}
+        category: {type: string}
+        local_area: {type: string}
+        times_reported: {type: integer}
+        months_seen: {type: integer}
+        last_reported: {type: string, format: date-time}
+        lat: {type: number}
+        lng: {type: number}
+    VolunteerRecord:
+      type: object
+      required: [id, title, organiser, date, hours, sample]
+      properties:
+        id: {type: string}
+        title: {type: string}
+        organiser: {type: string}
+        date: {type: string, format: date-time}
+        hours: {type: number, minimum: 0}
+        sample: {type: boolean}
+    VoteBudget:
+      type: object
+      required: [dailyLimit, votesUsed, votesRemaining, voteDate, resetsAt]
+      properties:
+        dailyLimit: {type: integer, const: 2}
+        votesUsed: {type: integer, minimum: 0, maximum: 2}
+        votesRemaining: {type: integer, minimum: 0, maximum: 2}
+        voteDate: {type: string, format: date, description: Vancouver calendar date}
+        resetsAt: {type: string, format: date-time}
+    VoteResult:
+      allOf:
+        - {$ref: '#/components/schemas/VoteBudget'}
+        - type: object
+          required: [myVote]
+          properties:
+            myVote: {type: integer, enum: [0, 1]}
     Comment:
       type: object
       required: [id, targetType, targetId, body, author, authorKind, createdAt]

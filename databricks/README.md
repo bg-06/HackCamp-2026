@@ -35,10 +35,17 @@ target and metadata row counts, and no unexpected skipped publishes. Zero new in
 rows can be valid when the City has no newer modifications. Zero event-impact rows
 can be valid before any events have been completed.
 
-The schedule is 06:00 `America/Vancouver`. The current development target pauses
-schedules on deployment. After verifying a run, explicitly unpause the existing job
-using the command in `databricks.yml`, then read the job settings back. Repeat this
-after each development deployment. Use the named timezone rather than a fixed UTC hour.
+The daily schedule is 06:00 `America/Vancouver`. The fast rankings/publish job runs
+at minutes 0, 15, 30 and 45 of every hour, so new completed events and votes reach
+gold on the next refresh (up to 15 minutes plus runtime). It does not rerun the 311
+pipeline. The app only needs to save its data to Postgres; n8n is not required.
+
+Development mode defaults schedules to paused, but the explicit `UNPAUSED` settings
+override that default in the current CLI (confirmed by bundle validation). Read both
+remote job schedules after deployment and confirm they remain enabled. If a schedule
+is paused, use the Jobs update command shown in `databricks.yml`, retaining that job's
+own cron expression. Use the named timezone rather than a fixed UTC hour. The fast
+cron expression is `0 0/15 * * * ?`.
 
 Avoid running the TypeScript and Databricks 311 ingesters concurrently. The daily
 job's concurrency limit protects that job, not other writers.
@@ -63,9 +70,21 @@ uses the authenticated CLI and SQL warehouse to run the actual impact SELECT ove
 synthetic CTEs; it creates no tables or app events. It checks each boundary separately,
 timezone conversion, and events without matching reports. The warehouse may start.
 
-After the app has a real completion path, verify its n8n trigger starts the fast job
-and that the event's impact row reaches Postgres. Synthetic SQL checks do not establish
-that the app/webhook integration works or that an event caused a reduction in reports.
+After the app has a real completion path, wait for the next successful scheduled
+refresh and verify that the event's impact row reaches Postgres. For an immediate
+demo refresh, use `databricks bundle run bbb_refresh_rankings` from `databricks/`.
+Synthetic SQL checks do not establish that the app completion endpoint works or that
+an event caused a reduction in reports.
+
+Run `python databricks/operations/verify_event_impact.py` from the repo root to list
+completed events, or add `--event-id <id>` to verify one against the latest successful
+fast-job run. Optional `--run-id <run_id>` selects a specific run. The verifier checks
+job/tasks, recomputed counts, Delta/Postgres event inputs, and publication within that
+run's start/end window. It rejects runs started before completion, never starts jobs,
+and never changes events. If there are no completed events it exits 2 with WAITING.
+
+See `../docs/databricks-track1-review.md` for the current six Track 1 types and the
+remaining app-side integration/copy gaps.
 
 ## Demo assets
 
