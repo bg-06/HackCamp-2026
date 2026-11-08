@@ -9,11 +9,20 @@ workspace:
 # bbb.gold.type_labels and its seed).
 
 variables:
+  warehouse_id:
+    description: SQL warehouse the dashboard runs on
+    default: 2f68997ea797ec69
   summary_endpoint:
     description: Foundation model endpoint for area summaries (see the Serving page)
     default: databricks-meta-llama-3-3-70b-instruct
 
 resources:
+  dashboards:
+    block_by_block:
+      display_name: "Block by Block: Vancouver 311"
+      file_path: ./dashboards/block_by_block.lvdash.json
+      warehouse_id: ${var.warehouse_id}
+
   pipelines:
     t311_pipeline:
       name: t311_pipeline
