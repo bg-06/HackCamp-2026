@@ -20,7 +20,6 @@
   --good: #1f7a45;
   --warning: #a8500f;
   --nav-bg: #ffffff;
-  --map-filter: none;
   --title-glow: rgb(255 255 255 / 92%);
   --cover-shade: transparent;
   color-scheme: light;
@@ -67,7 +66,6 @@
     --good: #4ade80;
     --warning: #f0a35e;
     --nav-bg: #111112;
-    --map-filter: invert(0.9) hue-rotate(180deg) brightness(1.25) contrast(1.1);
     --title-glow: rgb(17 17 18 / 92%);
     --cover-shade: rgb(17 17 18 / 58%);
     color-scheme: dark;
@@ -89,7 +87,6 @@
   --good: #4ade80;
   --warning: #f0a35e;
   --nav-bg: #111112;
-  --map-filter: invert(0.9) hue-rotate(180deg) brightness(1.25) contrast(1.1);
   --title-glow: rgb(17 17 18 / 92%);
   --cover-shade: rgb(17 17 18 / 58%);
   color-scheme: dark;
