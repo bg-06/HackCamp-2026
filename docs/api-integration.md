@@ -75,20 +75,23 @@ the existing frontend convention. `down_votes` is always 0. New `score` includes
 frontend can use returned `score`, or compute `base_score + 3 * (up_votes + my_vote)`.
 Event `commentCount` and issue `comment_count` are returned without multiplying votes.
 
-## Identity limitation
+## Authenticated identity
 
-The existing API still uses `X-Demo-User`, defaulting to `demo-user`; this is not
-authentication. Quotas, ownership and history are enforced against that current
-identity. Until Auth0 is integrated, clients without a distinct demo identity share
-the same allowance, and the header can be impersonated. Auth0 must replace this
-identity function before claiming a secure per-person limit or host authorization.
-This branch does not introduce a second authentication system.
+The Auth0 backend branch removes demo identity. Send a verified Auth0 **access token**
+for this API in `Authorization: Bearer <token>`. All writes and `/me/*` reads require
+it; anonymous browsing remains public. `X-Demo-User` is ignored. Quotas, event ownership,
+RSVPs, comments and history use the validated `sub`. See `docs/auth0-backend.md` for
+tenant setup, backend configuration, and the frontend owner's token handoff.
+
+No existing demo rows are automatically reassigned to a real user. Profile hours
+remain RSVP-based estimates; authentication does not verify physical attendance.
 
 ## Validation
 
 `npm --prefix app test` compiles and runs HTTP integration tests against an isolated
 in-memory Postgres instance using the real schema migrations and postgres.js driver.
-It reads no team credentials and writes no shared data. Tests cover event creation,
+It reads no team credentials and writes no shared data. Tests use locally generated
+RSA keys and signed JWTs. Tests cover event creation,
 host RSVP, completion/history, validation, parallel capacity/vote requests, idempotent
 votes, no refunds, migration backfill/replay, legacy downvotes and score ordering.
 
