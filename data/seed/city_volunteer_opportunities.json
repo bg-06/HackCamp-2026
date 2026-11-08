@@ -1,0 +1,47 @@
+[
+  {
+    "sourceKey": "neighbourhood-cleanup-party",
+    "title": "Host a Neighbourhood Cleanup Party",
+    "organiser": "City of Vancouver Neighbourhood Cleanup Programs",
+    "category": "Garbage and Dumping",
+    "location": "Across Vancouver",
+    "whatToBring": "The City can provide cleanup supplies for registered events.",
+    "signupUrl": "https://vancouver.ca/people-programs/neighbourhood-cleanup-party.aspx"
+  },
+  {
+    "sourceKey": "adopt-a-block",
+    "title": "Adopt a Block",
+    "organiser": "City of Vancouver",
+    "category": "Garbage and Dumping",
+    "location": "Across Vancouver",
+    "whatToBring": "Commit to cleaning an adopted block at least once a month for one year.",
+    "signupUrl": "https://vancouver.ca/people-programs/adopt-a-block-program.aspx"
+  },
+  {
+    "sourceKey": "adopt-a-catch-basin",
+    "title": "Adopt a Catch Basin",
+    "organiser": "City of Vancouver",
+    "category": "Water and Sewer",
+    "location": "Across Vancouver",
+    "whatToBring": "Keep a nearby catch basin clear of leaves and debris, especially before rain.",
+    "signupUrl": "https://vancouver.ca/people-programs/adopt-a-catch-basin.aspx"
+  },
+  {
+    "sourceKey": "park-stewards",
+    "title": "Become a Park Steward",
+    "organiser": "Vancouver Board of Parks and Recreation",
+    "category": "Parks and Trees",
+    "location": "Vancouver parks",
+    "whatToBring": "Park Board staff provide training, tools, and plants for stewardship activities.",
+    "signupUrl": "https://vancouver.ca/files/cov/become-a-park-steward.pdf"
+  },
+  {
+    "sourceKey": "green-streets",
+    "title": "Volunteer with Green Streets",
+    "organiser": "City of Vancouver",
+    "category": "Parks and Trees",
+    "location": "Street gardens across Vancouver",
+    "whatToBring": "Help care for a traffic-calming garden in your neighbourhood.",
+    "signupUrl": "https://vancouver.ca/people-programs/green-streets-program.aspx"
+  }
+]

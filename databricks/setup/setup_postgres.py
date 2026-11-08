@@ -1,11 +1,9 @@
 """One-time setup: connect Databricks to our Postgres.
 
-Reads the repo-root `env` or `.env` file (gitignored) and, using the already-authenticated `databricks` CLI:
+Reads the repo-root `env` file (gitignored) and, using the already-authenticated `databricks` CLI:
   1. creates secret scope `bbb` (if missing) and stores pg_host, pg_port, pg_db, pg_user, pg_password, pg_sslmode
   2. runs databricks/sql/setup.sql on a SQL warehouse: Unity Catalog connection `bbb_pg`,
-     foreign catalog `bbb_app` (read-only view of Postgres), `bbb.gold.track_overrides` and
-     `bbb.gold.type_labels`
-  3. runs databricks/sql/type_labels_seed.sql: the reviewed AI labels per request type
+     foreign catalog `bbb_app` (read-only view of Postgres) and the `bbb.gold.track_overrides` table
 
 Secrets go to the CLI on stdin, never on the command line, and are never printed.
 
@@ -94,10 +92,7 @@ def main():
     ap.add_argument("--skip-secrets", action="store_true")
     a = ap.parse_args()
 
-    env_file = next((p for p in (ROOT / "env", ROOT / ".env") if p.exists()), None)
-    if env_file is None:
-        sys.exit("No env or .env file at the repo root. Copy env.example to .env and fill it in.")
-    env = read_env(env_file)
+    env = read_env(ROOT / "env")
     if not a.skip_secrets:
         put_secrets(env)
 
@@ -105,7 +100,6 @@ def main():
     sql = sql.replace("${pg_host}", env["POSTGRES_HOST"]).replace("${pg_port}", env["POSTGRES_PORT"])
     sql = sql.replace("${pg_db}", env["POSTGRES_DB"])
     wh = pick_warehouse(a.warehouse_id)
-    sql += ";\n" + (ROOT / "databricks" / "sql" / "type_labels_seed.sql").read_text()
     for body in statements(sql):
         run_sql(wh, body)
         print("ok:", body.splitlines()[0])

@@ -25,15 +25,6 @@ CREATE TABLE IF NOT EXISTS bbb.gold.track_overrides (
   note STRING
 ) COMMENT 'Manual corrections to the AI track for a 311 request type';
 
--- Frozen AI category and track per request type (seeded by type_labels_seed.sql, new types added
--- by the freeze_type_labels job task). Read by bbb.gold.type_categories.
-CREATE TABLE IF NOT EXISTS bbb.gold.type_labels (
-  request_type STRING NOT NULL,
-  category STRING,
-  ai_track STRING,
-  labelled_at TIMESTAMP
-) COMMENT 'Stored AI labels per 311 request type, so labels stay the same between pipeline runs';
-
 -- Seed overrides: Track 1 picks from ai_classify (checked 2026-11-07) that volunteers shouldn't do.
 -- MERGE so re-running setup updates these rows and leaves any rows added by hand alone.
 MERGE INTO bbb.gold.track_overrides t
@@ -48,39 +39,7 @@ USING (SELECT * FROM VALUES
   ('Graffiti Removal - Private Property Case',           'none', 'property owner must remove it'),
   ('Graffiti Removal - Commercial Waste Container Case', 'none', 'bin owner must remove it'),
   ('Graffiti Management Program Case',                   'none', 'program inquiry, not a place'),
-  ('Adopt a Catch Basin Program Inquiry Case',           'none', 'program inquiry, not a place'),
-  -- Added 2026-11-07 after the full 2022-2026 load (checked against case counts).
-  -- AI 'city' picks that aren't a repair people can vote on:
-  ('Garbage Bin Request Case',                           'none', 'bin for one home, not a public problem'),
-  ('City Construction Project Concern Case',             'none', 'complaint about City work already underway'),
-  ('Street Construction Concern Case',                   'none', 'complaint about construction already underway'),
-  ('Construction Related Concerns Case',                 'none', 'complaint about construction already underway'),
-  ('Traffic Operations Construction Concern Case',       'none', 'complaint about construction already underway'),
-  ('Sewer Construction Concern Case',                    'none', 'complaint about construction already underway'),
-  ('Waterworks Operations Construction Concern Case',    'none', 'complaint about construction already underway'),
-  ('Residential Street Curbside Sign Request Case',      'none', 'parking regulation request, not a repair'),
-  ('Arterial St. Curbside Sign - New Request Case',      'none', 'parking regulation request, not a repair'),
-  ('Arterial St. Curbside Sign - Modify Request Case',   'none', 'parking regulation request, not a repair'),
-  ('Commercial Street Curbside Sign Request Case',       'none', 'parking regulation request, not a repair'),
-  ('Business Patio Inquiry Case',                        'none', 'inquiry, not a place'),
-  ('Traffic Management Inquiry Case',                    'none', 'inquiry, not a place'),
-  ('Sewer Drainage and Design Inquiry Case',             'none', 'inquiry, not a place'),
-  ('Sewer Operations Inquiry Case',                      'none', 'inquiry, not a place'),
-  ('Sidewalk Snow and Ice Removal Bylaw Inquiry Case',   'none', 'inquiry, not a place'),
-  ('Sidewalk Snow and Ice Removal Bylaw Violation Case', 'none', 'bylaw enforcement on a property owner'),
-  ('Unpermitted Construction Container Concern Case',    'none', 'bylaw enforcement on a property owner'),
-  ('Water Service Line Turn On or Off Request Case',     'none', 'service request for one property'),
-  ('Locate Water Service Line or Valve Case',            'none', 'service request for one property'),
-  ('Disaster Event Case',                                'none', 'emergency, not a repair to vote on'),
-  ('Community Scientist - Post-rain Inspection',         'none', 'volunteer inspection report, not a problem'),
-  -- AI 'neighbours' picks volunteers shouldn't take on:
-  ('Graffiti Removal - External Organization Case',      'none', 'utility or agency box, owner must remove it'),
-  ('Park Improvement Case',                              'none', 'suggestion, not a clean-up'),
-  ('Election Sign Concern Case',                         'none', 'campaign signs, bylaw matter'),
-  ('Sanitation Operations Inquiry Case',                 'none', 'inquiry, not a place'),
-  ('Illegal Dumping Case',                               'city', 'usually bulky items, needs a City pickup'),
-  -- AI 'none' picks that are a City repair at a place:
-  ('Parks Washroom Servicing Case',                      'city', 'City maintains park washrooms')
+  ('Adopt a Catch Basin Program Inquiry Case',           'none', 'program inquiry, not a place')
   AS v(request_type, track, note)
 ) s
 ON t.request_type = s.request_type

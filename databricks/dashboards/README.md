@@ -1,21 +1,15 @@
-# Dashboard: Block by Block: Vancouver 311
+# Dashboard setup: Block by Block: Vancouver 311
 
-The dashboard is code. `block_by_block.lvdash.json` is deployed and published by the bundle
-(`resources.dashboards.block_by_block` in `databricks/databricks.yml`, on the `warehouse_id` variable):
+1. In Databricks, open **Dashboards**, then **Create dashboard**. Name it `Block by Block: Vancouver 311`.
+2. Open the **Data** tab. For each query in `databricks/dashboards/queries.sql`, click **Create from SQL**, paste the query (without the comment), and rename the dataset to the comment's title.
+3. Open the **Canvas** tab and add one visualization per dataset, using the chart type in the comment:
+   - Query 1: bar chart (x `local_area`, y `hotspots`).
+   - Query 2: table.
+   - Query 3: line chart (x `week`, y `cases`, colour by `track`).
+   - Query 4: bar chart (x `category`, y `median_days`).
+   - Query 5: point map (latitude, longitude, colour by `track`).
+   - Query 6: table.
+4. Use one fixed colour for `neighbours` and another for `city` in every chart, the same as the app.
+5. Click **Publish**.
 
-    cd databricks && databricks bundle deploy
-
-It has a title and six charts, one per query in `queries.sql`: bar (hotspots by area), table (City-only issues),
-line (cases per week by track), bar (median days to close by category), point map (open issues by track), table (AI sorting).
-Tracks use fixed colours from the app: `neighbours` green `#2f7a2a`, `city` maple red `#9b2f26`.
-
-## Editing it
-
-1. Edit the deployed dashboard in the Databricks UI (Dashboards), or edit the JSON file directly.
-2. To pull UI changes back into the repo, from the `databricks/` folder:
-   `databricks bundle generate dashboard --resource block_by_block --dashboard-dir dashboards --force`
-   This overwrites `./dashboards/block_by_block.lvdash.json` with the deployed dashboard. Add `--watch` to keep
-   syncing while you edit in the UI. Then commit the `.lvdash.json`. (Or copy the JSON from the dashboard's **File > Export**.)
-3. Deploy again. Keep `queries.sql` in sync with the dataset queries.
-
-Note: queries 3, 4 and 5 filter relative to today's date (last 12 months or 90 days). The data is refreshed daily up to about yesterday, so they return rows; if the data stops updating, those charts thin out and eventually go empty.
+Note: queries 1, 3, 4 and 5 filter relative to today's date. If the data does not reach the present (for example while the Postgres load is partial), those charts will be empty until fresh data arrives.

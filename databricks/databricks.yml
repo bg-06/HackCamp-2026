@@ -5,24 +5,14 @@ workspace:
   host: https://dbc-7f6625ff-1e9b.cloud.databricks.com
 
 # Before the first deploy: python databricks/setup/setup_postgres.py
-# (secret scope `bbb`, connection `bbb_pg`, foreign catalog `bbb_app`, bbb.gold.track_overrides,
-# bbb.gold.type_labels and its seed).
+# (secret scope `bbb`, connection `bbb_pg`, foreign catalog `bbb_app`, bbb.gold.track_overrides).
 
 variables:
-  warehouse_id:
-    description: SQL warehouse the dashboard runs on
-    default: 2f68997ea797ec69
   summary_endpoint:
     description: Foundation model endpoint for area summaries (see the Serving page)
     default: databricks-meta-llama-3-3-70b-instruct
 
 resources:
-  dashboards:
-    block_by_block:
-      display_name: "Block by Block: Vancouver 311"
-      file_path: ./dashboards/block_by_block.lvdash.json
-      warehouse_id: ${var.warehouse_id}
-
   pipelines:
     t311_pipeline:
       name: t311_pipeline
@@ -40,30 +30,20 @@ resources:
 
   jobs:
     # Daily: Postgres -> bronze/silver/gold -> rankings -> summaries -> back to Postgres.
-    # ingest_311 fetches the new 311 rows into Postgres; the pipeline then reads them.
+    # The 311 fetch into Postgres (teammate) runs before this; add it as the first task when it exists.
     bbb_daily:
       name: bbb_daily
       schedule:
         quartz_cron_expression: "0 0 6 * * ?"   # 06:00 Vancouver, after the portal's nightly refresh
         timezone_id: America/Vancouver
-        # The dev target (mode: development) forces PAUSED on every deploy; after `databricks bundle deploy` unpause with:
-        # databricks jobs update --json '{"job_id": <bbb_daily job id>, "new_settings": {"schedule": {"quartz_cron_expression": "0 0 6 * * ?", "timezone_id": "America/Vancouver", "pause_status": "UNPAUSED"}}}'
-        pause_status: UNPAUSED
+        pause_status: PAUSED                     # unpause after the first good manual run
       max_concurrent_runs: 1
       tasks:
-        - task_key: ingest_311
-          notebook_task:
-            notebook_path: ./notebooks/ingest_311.py
         - task_key: pipeline_refresh
-          depends_on: [{ task_key: ingest_311 }]
           pipeline_task:
             pipeline_id: ${resources.pipelines.t311_pipeline.id}
-        - task_key: freeze_type_labels
-          depends_on: [{ task_key: pipeline_refresh }]
-          notebook_task:
-            notebook_path: ./notebooks/freeze_type_labels.py
         - task_key: refresh_rankings
-          depends_on: [{ task_key: freeze_type_labels }]
+          depends_on: [{ task_key: pipeline_refresh }]
           notebook_task:
             notebook_path: ./notebooks/refresh_rankings.py
         - task_key: area_summaries

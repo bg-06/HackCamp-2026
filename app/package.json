@@ -5,15 +5,22 @@
   "scripts": {
     "build:scripts": "tsc",
     "db:migrate": "tsc && node dist/scripts/migrate.js",
+    "db:seed-events": "tsc && node dist/scripts/seed-events.js",
     "ingest": "tsc && node dist/scripts/ingest.js refresh",
     "ingest:history": "tsc && node dist/scripts/load-311-history.js",
     "ingest:311": "tsc && node dist/scripts/ingest.js refresh-311",
     "ingest:static": "tsc && node dist/scripts/ingest.js refresh-static",
+    "ingest:orgs": "tsc && node dist/scripts/ingest-orgs.js",
+    "ingest:volunteer-events": "tsc && node dist/scripts/ingest-volunteer-events.js",
     "ingest:status": "tsc && node dist/scripts/ingest.js status",
     "api": "tsc && node dist/server/index.js",
+    "test": "tsc && node --test dist/tests/*.test.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@turf/boolean-point-in-polygon": "^7.4.0",
+    "@turf/helpers": "^7.4.0",
+    "cheerio": "^1.2.0",
     "dotenv": "^16.4.7",
     "express": "^5.3.0",
     "h3-js": "^4.5.0",

@@ -28,10 +28,10 @@ const iso = (d: Date | null) => (d ? d.toISOString() : undefined)
 
 type EventRow = {
   id: string; kind: string; title: string | null; organiser: string | null; category: string | null
-  starts_at: Date; ends_at: Date | null; location: string | null; local_area: string | null
+  starts_at: Date | null; ends_at: Date | null; location: string | null; local_area: string | null
   spots_total: number | null; what_to_bring: string | null; signup_url: string | null
   is_sample: boolean; latitude: number | null; longitude: number | null; h3_r9: string | null
-  created_at: Date; spots_taken: number; going: boolean
+  created_at: Date; source_withdrawn_at: Date | null; spots_taken: number; going: boolean
   hs_request_type: string | null; hs_times_reported: number | null; hs_months_seen: number | null
 }
 
@@ -40,7 +40,7 @@ function eventQuery(user: string, where: ReturnType<typeof sql>) {
   return sql<EventRow[]>`
     SELECT e.id, e.kind, e.title, e.organiser, e.category, e.starts_at, e.ends_at, e.location,
            e.local_area, e.spots_total, e.what_to_bring, e.signup_url, e.is_sample,
-           e.latitude, e.longitude, e.h3_r9, e.created_at,
+           e.latitude, e.longitude, e.h3_r9, e.created_at, e.source_withdrawn_at,
            count(r.user_id) FILTER (WHERE r.user_id <> ${user})::int AS spots_taken,
            coalesce(bool_or(r.user_id = ${user}), false) AS going,
            h.request_type AS hs_request_type, h.times_reported::int AS hs_times_reported,
@@ -51,7 +51,7 @@ function eventQuery(user: string, where: ReturnType<typeof sql>) {
     LEFT JOIN gold_help_hotspots h ON e.hotspot_id = h.h3_r9 || '|' || h.request_type
     WHERE ${where}
     GROUP BY e.id, h.h3_r9, h.request_type
-    ORDER BY e.starts_at`
+    ORDER BY e.starts_at NULLS LAST, e.id`
 }
 
 function toEvent(r: EventRow) {
@@ -63,8 +63,8 @@ function toEvent(r: EventRow) {
     title: r.title ?? 'Untitled event',
     organiser: r.organiser ?? 'Unknown organiser',
     category: r.category ?? 'Other',
-    startsAt: r.starts_at.toISOString(),
-    endsAt: (r.ends_at ?? r.starts_at).toISOString(),
+    startsAt: r.starts_at?.toISOString() ?? null,
+    endsAt: (r.ends_at ?? r.starts_at)?.toISOString() ?? null,
     location: r.location ?? 'Location to be announced',
     localArea: r.local_area ?? 'Vancouver',
     ...(inApp ? { spotsTotal: r.spots_total!, spotsTaken: r.spots_taken } : {}),
@@ -77,6 +77,7 @@ function toEvent(r: EventRow) {
     ...place,
     createdAt: iso(r.created_at),
     going: r.going,
+    withdrawn: r.source_withdrawn_at !== null,
   }
 }
 
@@ -149,14 +150,24 @@ app.get('/health', async (_req, res) => {
   res.json({ ok: true })
 })
 
-// Upcoming dated events (from yesterday on), soonest first. Undated programs are left out for now.
+// Active upcoming dated events plus supported ongoing external opportunities.
 app.get('/events', async (req, res) => {
-  const rows = await eventQuery(userId(req), sql`e.starts_at >= now() - interval '1 day'`)
+  const rows = await eventQuery(userId(req), sql`
+    e.source_withdrawn_at IS NULL AND e.done_at IS NULL AND (
+      e.starts_at >= now() - interval '1 day'
+      OR (e.starts_at IS NULL AND e.ends_at IS NULL AND e.kind IN ('city', 'org') AND e.signup_url IS NOT NULL)
+    )
+  `)
   res.json(rows.map(toEvent))
 })
 
 app.get('/events/:id', async (req, res) => {
-  const [row] = await eventQuery(userId(req), sql`e.id = ${req.params.id} AND e.starts_at IS NOT NULL`)
+  const [row] = await eventQuery(userId(req), sql`
+    e.id = ${req.params.id} AND (
+      e.starts_at IS NOT NULL
+      OR (e.starts_at IS NULL AND e.ends_at IS NULL AND e.kind IN ('city', 'org') AND e.signup_url IS NOT NULL)
+    )
+  `)
   if (!row) return void res.status(404).json({ error: 'event not found' })
   res.json(toEvent(row))
 })
