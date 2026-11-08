@@ -303,6 +303,89 @@ paths:
     parameters: [{$ref: '#/components/parameters/Id'}]
     get: *commentsGet
     post: *commentsPost
+  /me/profile:
+    get:
+      security: [{BearerAuth: []}]
+      summary: Your public display name
+      responses:
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '200':
+          description: The saved name, or null before one is set (comments then show "Neighbour")
+          content:
+            application/json:
+              schema: {type: object, required: [displayName], properties: {displayName: {type: [string, 'null']}}}
+    put:
+      security: [{BearerAuth: []}]
+      summary: Set the name shown on your comments and hosted events
+      description: The frontend sets this from the Auth0 profile after sign-in (first name and last initial, never an email). Auth0 user ids are never returned by any route.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [displayName], properties: {displayName: {type: string, minLength: 1, maxLength: 60}}}
+      responses:
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema: {type: object, required: [displayName], properties: {displayName: {type: string}}}
+  /briefings:
+    get:
+      summary: Published Block Steward briefings, newest first (max 50)
+      description: body is plain text with blank lines between paragraphs and "- " list lines. Render with white-space pre-wrap, never as HTML.
+      parameters:
+        - {name: area, in: query, required: false, schema: {type: string}}
+      responses:
+        '200':
+          description: Briefings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, localArea, title, body, weekOf, createdAt]
+                  properties:
+                    id: {type: string}
+                    localArea: {type: string}
+                    title: {type: string}
+                    body: {type: string}
+                    weekOf: {type: [string, 'null'], format: date}
+                    createdAt: {type: string, format: date-time}
+  /agent/suggestions:
+    post:
+      security: [{AgentAuth: [suggestions:post]}]
+      summary: Store a Block Steward event suggestion (agent/README.md payload contract)
+      description: Stored as pending posts, one per org id (or one area-wide row when org_ids is empty). A repeat dedupe_key, or a pending/dismissed suggestion for the same hotspot and org in the last 14 days, is skipped with 200.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, description: See agent/README.md}
+      responses:
+        '201': {description: At least one row stored, content: {application/json: {schema: {$ref: '#/components/schemas/AgentResult'}}}}
+        '200': {description: Nothing new stored, content: {application/json: {schema: {$ref: '#/components/schemas/AgentResult'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {description: Not a machine token, or missing the suggestions:post scope}
+  /agent/briefings:
+    post:
+      security: [{AgentAuth: [briefings:post]}]
+      summary: Publish a Block Steward weekly briefing (agent/README.md payload contract)
+      description: A repeat dedupe_key is skipped with 200.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, description: See agent/README.md}
+      responses:
+        '201': {description: Stored, content: {application/json: {schema: {$ref: '#/components/schemas/AgentResult'}}}}
+        '200': {description: Repeat, nothing stored, content: {application/json: {schema: {$ref: '#/components/schemas/AgentResult'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {description: Not a machine token, or missing the briefings:post scope}
 components:
   securitySchemes:
     BearerAuth:
@@ -310,6 +393,15 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: Auth0 RS256 access token for the configured API audience
+    AgentAuth:
+      type: oauth2
+      description: Auth0 client-credentials token (machine), accepted only on /agent routes; resident routes refuse it with 403
+      flows:
+        clientCredentials:
+          tokenUrl: https://YOUR_TENANT.us.auth0.com/oauth/token
+          scopes:
+            suggestions:post: Post event suggestions
+            briefings:post: Post weekly briefings
   parameters:
     Id:
       name: id
@@ -334,6 +426,12 @@ components:
       description: Internal server error
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   schemas:
+    AgentResult:
+      type: object
+      required: [stored, skipped]
+      properties:
+        stored: {type: integer}
+        skipped: {type: integer}
     Error:
       type: object
       required: [error]
@@ -369,7 +467,7 @@ components:
         createdAt: {type: string, format: date-time}
         going: {type: boolean, description: Whether the caller has RSVP'd.}
         hotspotId: {type: string}
-        createdBy: {type: string, description: Server-selected host identity}
+        hostedByMe: {type: boolean, description: True when the caller hosts this event. The host's Auth0 id is never returned}
         doneAt: {type: string, format: date-time}
         commentCount: {type: integer}
         withdrawn: {type: boolean}

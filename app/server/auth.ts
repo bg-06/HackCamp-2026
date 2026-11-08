@@ -3,7 +3,17 @@ import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose'
 import { ApiError } from './validation.js'
 
 export interface Auth0Settings { issuer: string; audience: string }
+
+// A verified caller: a resident (Auth0 user) or a machine (client-credentials app such as the agent).
+export type Principal =
+  | { kind: 'resident'; sub: string }
+  | { kind: 'machine'; sub: string; scopes: ReadonlySet<string> }
+
 const subjects = new WeakMap<Request, string>()
+const machines = new WeakMap<Request, Extract<Principal, { kind: 'machine' }>>()
+
+// Machine tokens are accepted only on these paths; resident tokens are refused there.
+const MACHINE_PATH = /^\/agent(?:\/|$)/
 
 export function loadAuth0Settings(env: NodeJS.ProcessEnv = process.env): Auth0Settings {
   const issuer = env.AUTH0_ISSUER?.trim(), audience = env.AUTH0_AUDIENCE?.trim()
@@ -23,13 +33,21 @@ export function userId(req: Request): string {
   return subject
 }
 
+/** The calling machine's client id, after checking its token carries `scope`. */
+export function requireScope(req: Request, scope: string): string {
+  const machine = machines.get(req)
+  if (!machine) throw new ApiError(401, 'Machine access token required')
+  if (!machine.scopes.has(scope)) throw new ApiError(403, `Missing scope ${scope}`)
+  return machine.sub
+}
+
 export function createTokenVerifier(settings: Auth0Settings, keys?: JWTVerifyGetKey) {
   const config = loadAuth0Settings({ AUTH0_ISSUER: settings.issuer, AUTH0_AUDIENCE: settings.audience })
   // The key URL is derived only from trusted server configuration, never jku/iss in a token.
   const resolveKey = keys ?? createRemoteJWKSet(new URL('.well-known/jwks.json', config.issuer), {
     timeoutDuration: 5000, cooldownDuration: 30000, cacheMaxAge: 600000,
   })
-  return async (token: string) => {
+  return async (token: string): Promise<Principal> => {
     const { payload } = await jwtVerify(token, resolveKey, {
       issuer: config.issuer, audience: config.audience, algorithms: ['RS256'],
       requiredClaims: ['sub', 'exp', 'iat'], clockTolerance: 5,
@@ -37,10 +55,12 @@ export function createTokenVerifier(settings: Auth0Settings, keys?: JWTVerifyGet
     if (typeof payload.sub !== 'string' || !payload.sub.trim()) throw new ApiError(401, 'Invalid access token')
     if (typeof payload.iat !== 'number' || !Number.isFinite(payload.iat) || payload.iat > Date.now() / 1000 + 5)
       throw new ApiError(401, 'Invalid access token')
-    // Resident writes must not turn an agent's client-credentials token into a person.
-    if (payload.gty === 'client-credentials' || payload.sub.endsWith('@clients'))
-      throw new ApiError(403, 'A resident access token is required')
-    return payload.sub
+    // A client-credentials token is a machine, never a person, so it can't act as a resident.
+    if (payload.gty === 'client-credentials' || payload.sub.endsWith('@clients')) {
+      const scopes = typeof payload.scope === 'string' ? payload.scope.split(' ').filter(Boolean) : []
+      return { kind: 'machine', sub: payload.sub, scopes: new Set(scopes) }
+    }
+    return { kind: 'resident', sub: payload.sub }
   }
 }
 
@@ -69,7 +89,15 @@ export function createAuthMiddleware(settings: Auth0Settings, keys?: JWTVerifyGe
     if (headerCount !== 1 || !match || authorization.length > 16384)
       return unauthorized(res, 'Invalid access token', true)
     try {
-      subjects.set(req, await verify(match[1]!))
+      const principal = await verify(match[1]!)
+      const machinePath = MACHINE_PATH.test(req.path)
+      if (principal.kind === 'machine') {
+        if (!machinePath) return void res.status(403).json({ error: 'A resident access token is required' })
+        machines.set(req, principal)
+      } else {
+        if (machinePath) return void res.status(403).json({ error: 'A machine access token is required' })
+        subjects.set(req, principal.sub)
+      }
       next()
     } catch (err) {
       if (err instanceof ApiError) {
