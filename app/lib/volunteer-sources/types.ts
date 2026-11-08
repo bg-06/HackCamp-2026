@@ -22,6 +22,7 @@ export type VolunteerListing = {
 export type VolunteerSnapshot = {
   listings: VolunteerListing[]
   validated: true
+  allowWithdrawal?: boolean
 }
 
 export type VolunteerSourceAdapter = {

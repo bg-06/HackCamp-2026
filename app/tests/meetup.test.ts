@@ -18,6 +18,22 @@ test('rejects malformed or unrecognized HTML', () => {
   )
 })
 
+test('does not mistake an incomplete events page for a confirmed empty snapshot', () => {
+  assert.throws(() => parseMeetupListings('<h1>Events</h1><p>Loading...</p>', source, organiser))
+})
+
+test('uses valid source coordinates and rejects malformed dates', () => {
+  const events = [
+    { '@type': ['Event'], name: 'Cleanup', startDate: '2026-12-01T10:00:00-08:00', url: 'https://www.meetup.com/group/events/7/', location: { name: 'Park', address: { streetAddress: '14600 North Bluff Rd', addressLocality: 'White Rock' }, geo: { latitude: 49.02, longitude: -122.8 } } },
+    { '@type': 'Event', name: 'Bad date', startDate: 'unknown', url: 'https://www.meetup.com/group/events/8/' },
+  ]
+  const html = `<script type="application/ld+json">${JSON.stringify(events)}</script>`
+  const listings = parseMeetupListings(html, source, organiser, Date.parse('2026-11-08')).listings
+  assert.equal(listings.length, 1)
+  assert.equal(listings[0]?.latitude, 49.02)
+  assert.equal(listings[0]?.location, 'Park · 14600 North Bluff Rd, White Rock')
+})
+
 test('parses active JSON-LD and filters ended events', () => {
   const html = `<html><body><h1>Events</h1><script type="application/ld+json">${JSON.stringify({
     '@graph': [
