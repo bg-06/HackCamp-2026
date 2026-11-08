@@ -1,0 +1,4 @@
+psycopg[binary]
+requests
+h3
+pytest

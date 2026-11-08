@@ -1,0 +1,181 @@
+import json
+import re
+from datetime import date, datetime, timedelta, timezone
+
+import h3
+
+from block_steward.suggest import suggest
+from block_steward.wording import plain_words
+
+TODAY = date(2026, 11, 8)
+CELL_A = h3.latlng_to_cell(49.263, -123.100, 9)
+CELL_B = h3.latlng_to_cell(49.265, -123.105, 9)
+DUMP = "Abandoned Non-Recyclables-Small Case"
+TAG = "Graffiti Removal - City Property Case"
+
+
+def hs(cell=CELL_A, rt=DUMP, cat="Garbage and Dumping", area="Mount Pleasant",
+       n=9, months=6, last=None):
+    return {
+        "h3_r9": cell, "request_type": rt, "category": cat, "local_area": area,
+        "times_reported": n, "months_seen": months,
+        "last_reported": last or datetime(2026, 11, 5, 17, 0, tzinfo=timezone.utc),
+    }
+
+
+def ev(cell=CELL_A, days=3, done=None):
+    start = datetime.combine(TODAY + timedelta(days=days), datetime.min.time(),
+                             tzinfo=timezone.utc).replace(hour=15)
+    return {"h3_r9": cell, "done_at": done, "starts_at": start}
+
+
+def org(oid, lat, lng):
+    return {"id": oid, "name": f"Org {oid}", "latitude": lat, "longitude": lng}
+
+
+def test_uncovered_hotspot_is_suggested():
+    assert len(suggest([hs()], [], [], TODAY)) == 1
+
+
+def test_event_inside_window_covers():
+    assert suggest([hs()], [ev(days=3)], [], TODAY) == []
+    assert suggest([hs()], [ev(days=0)], [], TODAY) == []
+    assert suggest([hs()], [ev(days=14)], [], TODAY) == []
+
+
+def test_event_outside_window_does_not_cover():
+    assert len(suggest([hs()], [ev(days=15)], [], TODAY)) == 1
+    assert len(suggest([hs()], [ev(days=-1)], [], TODAY)) == 1
+
+
+def test_done_event_ignored():
+    done = datetime(2026, 11, 9, tzinfo=timezone.utc)
+    assert len(suggest([hs()], [ev(days=3, done=done)], [], TODAY)) == 1
+
+
+def test_event_on_different_cell_ignored():
+    assert len(suggest([hs()], [ev(cell=CELL_B, days=3)], [], TODAY)) == 1
+
+
+def test_window_days_option():
+    assert len(suggest([hs()], [ev(days=10)], [], TODAY, window_days=7)) == 1
+
+
+def test_ranking_and_max_per_area():
+    cells = [h3.latlng_to_cell(49.26 + i * 0.003, -123.1, 9) for i in range(5)]
+    hots = [
+        hs(cell=cells[0], n=5, months=4),
+        hs(cell=cells[1], n=9, months=3),
+        hs(cell=cells[2], n=9, months=6),
+        hs(cell=cells[3], n=5, months=4,
+           last=datetime(2026, 11, 7, tzinfo=timezone.utc)),
+        hs(cell=cells[4], n=2, months=3),
+    ]
+    out = suggest(hots, [], [], TODAY)
+    assert [p["hotspot"]["h3_r9"] for p in out] == [cells[2], cells[1], cells[3]]
+    out5 = suggest(hots, [], [], TODAY, max_per_area=5)
+    assert [p["hotspot"]["h3_r9"] for p in out5] == [
+        cells[2], cells[1], cells[3], cells[0], cells[4]]
+
+
+def test_max_per_area_is_per_area():
+    hots = [hs(area="Kitsilano", cell=CELL_A), hs(area="Fairview", cell=CELL_B)]
+    assert len(suggest(hots, [], [], TODAY, max_per_area=1)) == 2
+
+
+def test_area_filter():
+    hots = [hs(area="Kitsilano", cell=CELL_A), hs(area="Fairview", cell=CELL_B)]
+    out = suggest(hots, [], [], TODAY, areas=["Fairview"])
+    assert [p["local_area"] for p in out] == ["Fairview"]
+
+
+def test_null_local_area_skipped():
+    assert suggest([hs(area=None)], [], [], TODAY) == []
+
+
+def test_nearest_orgs_within_2km_sorted_and_capped():
+    lat, lng = h3.cell_to_latlng(CELL_A)
+    orgs = [
+        org(1, lat + 0.010, lng),   # about 1.1 km
+        org(2, lat + 0.002, lng),   # about 0.2 km
+        org(3, lat + 0.005, lng),   # about 0.6 km
+        org(4, lat + 0.008, lng),   # about 0.9 km
+        org(5, lat + 0.030, lng),   # about 3.3 km, too far
+        {"id": 6, "name": "No coords", "latitude": None, "longitude": None},
+    ]
+    assert suggest([hs()], [], orgs, TODAY)[0]["org_ids"] == [2, 3, 4]
+    out = suggest([hs()], [], orgs, TODAY, max_orgs=10)
+    assert out[0]["org_ids"] == [2, 3, 4, 1]
+
+
+def test_no_orgs_gives_empty_list():
+    assert suggest([hs()], [], [], TODAY)[0]["org_ids"] == []
+
+
+def test_program_for_dumping_and_litter():
+    p = suggest([hs()], [], [], TODAY)[0]
+    assert p["city_program"] == {
+        "name": "City Neighbourhood Cleanup Programs (Cleanup Party, Adopt a Block)",
+        "url": "https://app.betterimpact.com/PublicOrganization/c6e38574-b5fa-4920-9679-a5ec7c8dd23c/3",
+    }
+    assert "The City lends cleanup supplies through its Cleanup Party program." in p["body"]
+    assert p["event_draft"]["what_to_bring"] == "Gloves, grabbers and bags"
+    lit = suggest([hs(rt="Loose Litter Clean Up Case")], [], [], TODAY)[0]
+    assert lit["city_program"] is not None
+
+
+def test_graffiti_has_no_program():
+    p = suggest([hs(rt=TAG, cat="Graffiti")], [], [], TODAY)[0]
+    assert p["city_program"] is None
+    assert p["event_draft"]["what_to_bring"] == \
+        "Gloves and a phone to report new tags in Van311"
+    assert "Van311" in p["body"]
+    assert "Cleanup Party" not in p["body"]
+
+
+def test_plain_words_mapping():
+    assert plain_words("Abandoned Non-Recyclables-Small Case") == "small abandoned items"
+    assert plain_words("Abandoned Recyclables Case") == "abandoned recyclables"
+    assert plain_words("Street Cleaning and Debris Pick Up Case") == "street debris"
+    assert plain_words("Loose Litter Clean Up Case") == "loose litter"
+    assert plain_words("Graffiti Removal - City Property Case") == "graffiti on City property"
+    assert plain_words("Graffiti Removal - Park Property Case") == "graffiti in parks"
+    assert plain_words("Some New Thing Case") == "some new thing"
+
+
+def test_payload_contract_keys_and_values():
+    p = suggest([hs()], [], [], TODAY)[0]
+    assert set(p) == {"kind", "author", "local_area", "org_ids", "title", "body",
+                      "hotspot", "event_draft", "city_program", "dedupe_key"}
+    assert p["kind"] == "suggestion"
+    assert p["author"] == "block-steward-agent"
+    assert p["local_area"] == "Mount Pleasant"
+    assert p["title"] == "Host a cleanup near Mount Pleasant?"
+    assert set(p["hotspot"]) == {"h3_r9", "request_type", "category",
+                                 "times_reported", "months_seen", "last_reported"}
+    assert p["hotspot"]["last_reported"].startswith("2026-11-05T")
+    d = p["event_draft"]
+    assert set(d) == {"kind", "title", "category", "local_area", "latitude",
+                      "longitude", "hotspot_id", "what_to_bring", "signup_url"}
+    assert d["kind"] == "hotspot"
+    assert d["hotspot_id"] == f"{CELL_A}:{DUMP}"
+    assert d["signup_url"] is None
+    lat, lng = h3.cell_to_latlng(CELL_A)
+    assert (d["latitude"], d["longitude"]) == (lat, lng)
+    json.dumps(p)
+
+
+def test_dedupe_key_format():
+    p = suggest([hs()], [], [], TODAY)[0]
+    assert p["dedupe_key"] == f"suggestion:{CELL_A}:{DUMP}:2026-11-08"
+
+
+def test_body_plain_text_and_data_numbers_only():
+    body = suggest([hs()], [], [], TODAY)[0]["body"]
+    assert not re.search(r"<[^>]+>|^#", body, re.M)
+    assert "9 times over 6 months" in body
+    assert "Nov 5" in body
+    assert "Mount Pleasant" in body
+    assert "next two weeks" in body
+    assert set(re.findall(r"\d+", body)) <= {"9", "6", "5"}
+    assert 2 <= len(re.findall(r"[.?!](?:\s|$)", body)) <= 4
