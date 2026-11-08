@@ -108,7 +108,7 @@ def api_json(url, params=None, timeout=120, sleep=time.sleep):
 
 
 def record_page(dataset_id, offset, where=None, fetch=api_json):
-    params = {"limit": PAGE_SIZE, "offset": offset}
+    params = {"limit": PAGE_SIZE, "offset": offset, "order_by": "last_modified_timestamp"}
     if where:
         params["where"] = where
     return fetch(f"{API_ROOT}/{dataset_id}/records", params)
@@ -169,10 +169,14 @@ def ingest_311(conn):
     end = floor_ms(datetime.now(timezone.utc))
     for start, stop in windows(since, end):
         records = all_records(DATASET_311, where_clause(start, stop))
+        conn.run("START TRANSACTION")  # each window is all-or-nothing
+        window_rows = 0
         for batch in batches(records):
             sql, params = insert_sql_and_params(batch)
             conn.run(sql, **params)
-            loaded += len(batch)
+            window_rows += len(batch)
+        conn.run("COMMIT")
+        loaded += window_rows
         print(f"{DATASET_311}: {iso(start)}–{iso(stop)} ({len(records)}), total {loaded}")
     return loaded
 
@@ -192,6 +196,10 @@ try:
         )
         print(f"{DATASET_311}: loaded {loaded} rows")
     except Exception as e:
+        try:
+            conn.run("ROLLBACK")
+        except Exception:
+            pass
         conn.run("UPDATE ingest_state SET last_error = :m WHERE dataset_id = :d", m=str(e), d=DATASET_311)
         raise
 finally:
