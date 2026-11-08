@@ -1,6 +1,6 @@
 # Submission materials
 
-Initial English drafts for Block by Block, HackCamp 2026.
+Initial English drafts for GreenHands BC, HackCamp 2026.
 
 - `devpost-draft.md`: Devpost narrative and final submission checklist.
 - `video-script.md`: approximately 3:30 recording plan, with conditional scenes.

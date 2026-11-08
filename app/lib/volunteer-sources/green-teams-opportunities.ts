@@ -3,7 +3,7 @@ import type { VolunteerListing, VolunteerSnapshot, VolunteerSourceAdapter } from
 
 const PAGE_URL = 'https://greenteamscanada.ca/locations/lower-mainland-green-team/'
 const OFFICIAL_IMAGE = 'https://greenteamscanada.ca/wp-content/uploads/2023/11/GT-get-involved-1024x271.jpg'
-const USER_AGENT = 'BlockByBlock-Volunteer-Indexer/1.0 (+https://github.com/bg-06/HackCamp-2026)'
+const USER_AGENT = 'GreenHandsBC-Volunteer-Indexer/1.0 (+https://github.com/bg-06/HackCamp-2026)'
 
 export function parseLowerMainlandOpportunity(html: string, source: string): VolunteerSnapshot {
   const $ = load(html)

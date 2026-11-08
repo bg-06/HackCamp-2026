@@ -1,4 +1,4 @@
-"""Block by Block 311 pipeline (Lakeflow Spark Declarative Pipelines).
+"""GreenHands BC 311 pipeline (Lakeflow Spark Declarative Pipelines).
 
 All input lands in our Postgres (see plan.md 3.1); Databricks reads it through the Lakehouse
 Federation foreign catalog `bbb_app` (created by databricks/setup/setup_postgres.py).

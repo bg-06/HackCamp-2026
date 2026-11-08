@@ -1,5 +1,5 @@
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
-const IMAGE_USER_AGENT = 'BlockByBlock-Volunteer-Indexer/1.0 (+https://github.com/bg-06/HackCamp-2026)'
+const IMAGE_USER_AGENT = 'GreenHandsBC-Volunteer-Indexer/1.0 (+https://github.com/bg-06/HackCamp-2026)'
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 
 export type DownloadedImage = {

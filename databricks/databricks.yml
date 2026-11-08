@@ -19,7 +19,7 @@ variables:
 resources:
   dashboards:
     block_by_block:
-      display_name: "Block by Block: Vancouver 311"
+      display_name: "GreenHands BC: Vancouver 311"
       file_path: ./dashboards/block_by_block.lvdash.json
       warehouse_id: ${var.warehouse_id}
 

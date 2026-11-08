@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Block by Block",
-  "short_name": "Block by Block",
+  "name": "GreenHands BC",
+  "short_name": "GreenHands BC",
   "description": "Help out on your block, and vote on what the City should fix first.",
   "start_url": "/",
   "scope": "/",

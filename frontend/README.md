@@ -1,4 +1,4 @@
-# Block by Block — frontend
+# GreenHands BC — frontend
 
 React + TypeScript + Vite. Mobile-first. Three tabs in the bottom nav:
 

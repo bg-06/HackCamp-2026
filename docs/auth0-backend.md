@@ -39,7 +39,7 @@ and uses [jose JWT verification](https://github.com/panva/jose/blob/main/docs/jw
 If the tenant/API already exists, reuse it and provide its public domain and API
 identifier. Otherwise, the person with the Auth0 account completes these steps:
 
-1. In Auth0, create an API named **Block by Block API**, identifier
+1. In Auth0, create an API named **GreenHands BC API**, identifier
    `https://api.blockbyblock`, signing algorithm **RS256**. The identifier is an
    audience string; it does not need to be a hosted website.
 2. Create a **Single Page Application** for the React frontend. Enable the desired

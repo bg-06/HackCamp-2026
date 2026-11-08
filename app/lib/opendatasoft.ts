@@ -17,7 +17,7 @@ export async function apiJson<T>(
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
       const response = await fetch(target, {
-        headers: { 'user-agent': 'BlockByBlock-Ingest/1.0 (+https://github.com/bg-06/HackCamp-2026)' },
+        headers: { 'user-agent': 'GreenHandsBC-Ingest/1.0 (+https://github.com/bg-06/HackCamp-2026)' },
         signal: AbortSignal.timeout(timeoutMs),
       })
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}: ${target}`)

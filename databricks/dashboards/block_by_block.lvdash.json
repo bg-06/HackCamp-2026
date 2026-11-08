@@ -68,14 +68,14 @@
   "pages": [
     {
       "name": "main",
-      "displayName": "Block by Block: Vancouver 311",
+      "displayName": "GreenHands BC: Vancouver 311",
       "layout": [
         {
           "widget": {
             "name": "title",
             "multilineTextboxSpec": {
               "lines": [
-                "# Block by Block: Vancouver 311\n",
+                "# GreenHands BC: Vancouver 311\n",
                 "Where neighbours can help (green) and what only the City can fix (red)."
               ]
             }

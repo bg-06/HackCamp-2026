@@ -1,4 +1,4 @@
--- Gold layer for Block by Block. Runs inside t311_pipeline after silver.
+-- Gold layer for GreenHands BC. Runs inside t311_pipeline after silver.
 -- Views that read the app's Postgres tables (votes, events) live in rankings.sql instead,
 -- so the pipeline still runs before the app has created those tables.
 

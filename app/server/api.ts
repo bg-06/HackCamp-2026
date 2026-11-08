@@ -1,4 +1,4 @@
-// Block by Block API: what the React frontend calls (frontend/src/api/client.ts).
+// GreenHands BC API: what the React frontend calls (frontend/src/api/client.ts).
 // Response shapes match frontend/src/types.ts: VolunteerEvent, Track2Issue, Comment.
 // Run: npm --prefix app run api   (http://localhost:8000; Vite forwards /api/* here)
 import express, { type NextFunction, type Request, type Response, type RequestHandler } from 'express'

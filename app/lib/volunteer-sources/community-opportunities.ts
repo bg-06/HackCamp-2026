@@ -1,7 +1,7 @@
 import { load } from 'cheerio'
 import type { VolunteerListing, VolunteerSnapshot, VolunteerSourceAdapter } from './types.js'
 
-const USER_AGENT = 'BlockByBlock-Volunteer-Indexer/1.0 (+https://github.com/bg-06/HackCamp-2026)'
+const USER_AGENT = 'GreenHandsBC-Volunteer-Indexer/1.0 (+https://github.com/bg-06/HackCamp-2026)'
 
 type OpportunityConfig = {
   id: string

@@ -175,7 +175,7 @@ export default function HomePage() {
     const body = [
       `Hello,`,
       ``,
-      `These are the most pressing City issues in ${CITY.name}, as voted by neighbours on Block by Block:`,
+      `These are the most pressing City issues in ${CITY.name}, as voted by neighbours on GreenHands BC:`,
       ``,
       ...lines,
       ``,

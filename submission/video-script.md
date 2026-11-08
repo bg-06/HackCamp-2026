@@ -14,7 +14,7 @@ Target: approximately 3 minutes 30 seconds, leaving space below the event's publ
 ## 0:00–0:25 — The problem
 Screen: opening title, then the Volunteer feed.
 
-“When you notice a problem in your neighbourhood, what happens next? You might want to help, but finding the right opportunity can take more effort than the action itself. Block by Block helps Vancouver residents move from noticing a problem to taking a useful next step.”
+“When you notice a problem in your neighbourhood, what happens next? You might want to help, but finding the right opportunity can take more effort than the action itself. GreenHands BC helps Vancouver residents move from noticing a problem to taking a useful next step.”
 
 ## 0:25–1:05 — Find a way to help
 Screen: browse the feed, choose a neighbourhood or sort option, open a verified event.
@@ -54,6 +54,6 @@ If the in-app screens are still missing, add: “The agent already delivers its 
 ## 3:10–3:30 — Close
 Screen: return to the app, then project name and public URL.
 
-“Block by Block connects local information with local action. Our next steps are finishing organization and moderation workflows, validating the full deployment, and testing with community groups. We want helping your neighbourhood to start with one clear next step.”
+“GreenHands BC connects local information with local action. Our next steps are finishing organization and moderation workflows, validating the full deployment, and testing with community groups. We want helping your neighbourhood to start with one clear next step.”
 
 Update the closing status after integration. Do not describe deployment as unfinished if it has passed verification by recording time.
