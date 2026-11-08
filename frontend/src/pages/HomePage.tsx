@@ -189,6 +189,68 @@ export default function HomePage() {
   const locationNote = LOCATION_NOTES[locStatus];
   const helpId = `${tab}-feed-help`;
 
+  // Prototype: the recurring-spots rail breaks up the feed like an Instagram interstitial
+  // about ten posts down, instead of sitting above every post.
+  const FEED_BREAK_AFTER = 10;
+  const breakAt = Math.min(FEED_BREAK_AFTER, shownEvents.length);
+  const feedEvents = shownEvents.slice(0, breakAt);
+  const moreEvents = shownEvents.slice(breakAt);
+  const feedItem = (e: (typeof shownEvents)[number]) => {
+    const ratio = coverRatio(e.id, Boolean(e.photoUrl));
+    return {
+      key: e.id,
+      ratio,
+      node: <EventTile event={e} ratio={ratio} distanceKm={here ? distanceTo(here, e) : undefined} />,
+    };
+  };
+
+  const needsHelpRail = openHotspots.length > 0 && (
+    <section className="needs-help" aria-labelledby="needs-help-heading">
+      <div className="needs-help-head">
+        <h2 id="needs-help-heading">Needs help</h2>
+        <p className="muted small">{openHotspots.length} reported spots, nothing planned</p>
+      </div>
+      <ul className="help-strip" tabIndex={0} aria-label="Spots that need help">
+        {hotspotsShown.map((p) => {
+          const report = p.action === "report";
+          const body = (
+            <>
+              <span className="help-card-top">
+                <span className="help-count">{p.reports} reports</span>
+                {here && p.hotspot.lat !== undefined && <span className="muted small">{formatKm(distanceTo(here, p.hotspot)!)}</span>}
+              </span>
+              <span className="row-title">{p.label}</span>
+              <span className="muted small">{p.hotspot.near ?? p.hotspot.local_area} · {p.monthsSeen} of 12 months</span>
+              <span className="help-start">
+                {report ? "Report to the City" : p.action === "walk" ? "Plan a walk" : "Start a cleanup"} <span aria-hidden="true">{report ? "↗" : "→"}</span>
+              </span>
+            </>
+          );
+          return (
+            <li key={p.id} className="help-card">
+              {report ? (
+                <a className="help-card-link" href={VAN311_URL} target="_blank" rel="noopener noreferrer">
+                  {body}
+                </a>
+              ) : (
+                <Link className="help-card-link" to={`/volunteer/new?hotspot=${encodeURIComponent(p.id)}`}>
+                  {body}
+                </Link>
+              )}
+            </li>
+          );
+        })}
+        {!showAllHotspots && openHotspots.length > hotspotsShown.length && (
+          <li className="help-card help-more">
+            <button className="chip-button" onClick={() => setShowAllHotspots(true)}>
+              Show all {openHotspots.length}
+            </button>
+          </li>
+        )}
+      </ul>
+    </section>
+  );
+
   return (
     <div className="page">
       <header className={`home-header track-${tab}`}>
@@ -290,58 +352,10 @@ export default function HomePage() {
           )}
         </section>
 
-        {/* Prototype: "Ways to help" leads, with the recurring-spot carousel folded in
-            underneath it (Instagram-threads style) so planning is reachable without
-            scrolling past the whole page first. */}
+        {/* Prototype: "Ways to help" leads the volunteer feed. The recurring-spots rail is
+            injected partway down the posts instead of sitting above them. */}
         {tab === "volunteer" && (openHotspots.length > 0 || shownEvents.length > 0) && (
           <h2 className="feed-heading" id="ways-to-help-heading">Ways to help</h2>
-        )}
-
-        {tab === "volunteer" && openHotspots.length > 0 && (
-          <section className="needs-help" aria-labelledby="needs-help-heading">
-            <div className="needs-help-head">
-              <h2 id="needs-help-heading">Needs help</h2>
-              <p className="muted small">{openHotspots.length} reported spots, nothing planned</p>
-            </div>
-            <ul className="help-strip" tabIndex={0} aria-label="Spots that need help">
-              {hotspotsShown.map((p) => {
-                const report = p.action === "report";
-                const body = (
-                  <>
-                    <span className="help-card-top">
-                      <span className="help-count">{p.reports} reports</span>
-                      {here && p.hotspot.lat !== undefined && <span className="muted small">{formatKm(distanceTo(here, p.hotspot)!)}</span>}
-                    </span>
-                    <span className="row-title">{p.label}</span>
-                    <span className="muted small">{p.hotspot.near ?? p.hotspot.local_area} · {p.monthsSeen} of 12 months</span>
-                    <span className="help-start">
-                      {report ? "Report to the City" : p.action === "walk" ? "Plan a walk" : "Start a cleanup"} <span aria-hidden="true">{report ? "↗" : "→"}</span>
-                    </span>
-                  </>
-                );
-                return (
-                  <li key={p.id} className="help-card">
-                    {report ? (
-                      <a className="help-card-link" href={VAN311_URL} target="_blank" rel="noopener noreferrer">
-                        {body}
-                      </a>
-                    ) : (
-                      <Link className="help-card-link" to={`/volunteer/new?hotspot=${encodeURIComponent(p.id)}`}>
-                        {body}
-                      </Link>
-                    )}
-                  </li>
-                );
-              })}
-              {!showAllHotspots && openHotspots.length > hotspotsShown.length && (
-                <li className="help-card help-more">
-                  <button className="chip-button" onClick={() => setShowAllHotspots(true)}>
-                    Show all {openHotspots.length}
-                  </button>
-                </li>
-              )}
-            </ul>
-          </section>
         )}
 
         {loading && tab === "issues" && (
@@ -374,23 +388,20 @@ export default function HomePage() {
         )}
 
         {tab === "volunteer" && events.items && shownEvents.length === 0 && (
-          <div className="empty">
-            <p>{q ? "Nothing matches that yet." : "No ways to help here yet. Start one from a spot above."}</p>
-          </div>
+          <>
+            {!q && needsHelpRail}
+            <div className="empty">
+              <p>{q ? "Nothing matches that yet." : "No ways to help here yet. Start one from a spot above."}</p>
+            </div>
+          </>
         )}
 
         {tab === "volunteer" && shownEvents.length > 0 && (
-          <MasonryFeed
-            label="Ways to volunteer"
-            items={shownEvents.map((e) => {
-              const ratio = coverRatio(e.id, Boolean(e.photoUrl));
-              return {
-                key: e.id,
-                ratio,
-                node: <EventTile event={e} ratio={ratio} distanceKm={here ? distanceTo(here, e) : undefined} />,
-              };
-            })}
-          />
+          <>
+            <MasonryFeed label="Ways to volunteer" items={feedEvents.map(feedItem)} />
+            {needsHelpRail}
+            {moreEvents.length > 0 && <MasonryFeed label="Ways to volunteer, continued" items={moreEvents.map(feedItem)} />}
+          </>
         )}
 
         {tab === "issues" && issues.items && shownIssues.length === 0 && (
