@@ -23,6 +23,7 @@ export default function IssuePage() {
   const [fetched, setFetched] = useState<Track2Issue | null | undefined>(undefined); // undefined = loading
   const [error, setError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [contextOpen, setContextOpen] = useState(false);
   const inFeed = Boolean(cached);
   const lastTap = useRef(0);
 
@@ -99,9 +100,24 @@ export default function IssuePage() {
           <>
             <article className="detail">
               <img className="detail-photo" src={issue.photo_url || issueImage(issue.category)} alt="" />
-              {!issue.photo_url && <p className="muted small">Illustrative image · not a photo of this issue</p>}
-              <p className="eyebrow">{categoryStyle(issue.category).label} · Only the City can fix this</p>
-              <h1>{issue.request_type.replace(/ Case$/, "")}</h1>
+              <div className="detail-title-row">
+                <h1>{issue.request_type.replace(/ Case$/, "")}</h1>
+                <button
+                  className="help-button"
+                  type="button"
+                  aria-label={`${contextOpen ? "Hide" : "Show"} issue context`}
+                  aria-expanded={contextOpen}
+                  aria-controls="issue-context-help"
+                  onClick={() => setContextOpen(!contextOpen)}
+                >
+                  ?
+                </button>
+              </div>
+              {contextOpen && (
+                <p className="detail-context-help" id="issue-context-help">
+                  Category: {categoryStyle(issue.category).label}. {issue.photo_url ? "This issue includes a submitted photo." : "The image is illustrative, not a photo of this issue."} Only the City can fix this category.
+                </p>
+              )}
               <p className="muted">{issue.address ?? issue.local_area}</p>
 
               <dl className="facts">

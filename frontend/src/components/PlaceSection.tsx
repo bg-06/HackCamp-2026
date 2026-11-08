@@ -7,9 +7,10 @@ interface Props {
   lat?: number
   lng?: number
   label: string // the address or place name
+  website?: string
 }
 
-export default function PlaceSection({ lat, lng, label }: Props) {
+export default function PlaceSection({ lat, lng, label, website }: Props) {
   const [mapFailed, setMapFailed] = useState(false)
   const onFail = useCallback(() => setMapFailed(true), [])
   const hasPlace = lat !== undefined && lng !== undefined
@@ -34,8 +35,12 @@ export default function PlaceSection({ lat, lng, label }: Props) {
           )}
           {mapFailed && <p className="muted" role="status">The map couldn't load. You can still open directions.</p>}
         </>
+      ) : website ? (
+        <a className="chip-button directions-button" href={website} target="_blank" rel="noopener noreferrer">
+          Visit organiser website ↗
+        </a>
       ) : (
-        <p className="muted">No fixed place. You choose where.</p>
+        <p className="muted">Contact the organiser for location details.</p>
       )}
     </section>
   )

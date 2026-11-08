@@ -13,6 +13,8 @@
   --bg: #111114;
   --surface: #1c1c20;
   --surface-muted: #26262b;
+  --chrome: var(--bg);
+  --field: var(--surface);
   --border: #73737c;
   --text: #f4f4f5;
   --text-muted: #a5a5ad;
@@ -33,11 +35,13 @@
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
   background: var(--bg);
+  color-scheme: dark;
 }
 
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
     --bg: #eef2f6; --surface: #ffffff; --surface-muted: #e3e9ef;
+    --chrome: #ffffff; --field: #e3e9ef;
     --border: #777f88; --text: #111214; --text-muted: #595f69;
     --blue: #2563eb; --blue-dark: #1d4ed8; --blue-light: #e8f0fe;
     --warning: #a8500f;
@@ -47,6 +51,7 @@
 }
 :root[data-theme="light"] {
   --bg: #eef2f6; --surface: #ffffff; --surface-muted: #e3e9ef;
+  --chrome: #ffffff; --field: #e3e9ef;
   --border: #777f88; --text: #111214; --text-muted: #595f69;
   --blue: #2563eb; --blue-dark: #1d4ed8; --blue-light: #e8f0fe;
   --warning: #a8500f;
@@ -127,7 +132,7 @@ button {
 
 /* ---------- Header ---------- */
 .home-header {
-  --header-bg: var(--bg);
+  --header-bg: var(--chrome);
   --header-ink: var(--text);
   --header-tint: var(--surface-muted);
   background: var(--header-bg);
@@ -135,7 +140,7 @@ button {
   border-bottom: 1px solid var(--border);
 }
 .home-header.track-issues {
-  --header-bg: var(--bg);
+  --header-bg: var(--chrome);
   --header-ink: var(--text);
   --header-tint: var(--surface-muted);
 }
@@ -148,7 +153,7 @@ button {
   place-items: center;
   height: 60px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--chrome);
   color: var(--text);
 }
 .simple-header h1 {
@@ -221,7 +226,7 @@ button {
   padding: 10px 12px;
   border: none;
   border-radius: var(--radius);
-  background: var(--surface);
+  background: var(--field);
   color: var(--text);
 }
 
@@ -248,12 +253,7 @@ button {
   font-size: 0.85rem;
 }
 .filter-chip.selected {
-  background: var(--surface);
-  color: var(--track1);
   font-weight: 600;
-}
-.home-header.track-issues .filter-chip.selected {
-  color: var(--track2);
 }
 
 /* ---------- Text helpers ---------- */
@@ -284,24 +284,58 @@ button {
   text-decoration: underline;
 }
 
-/* Intro at the top of each feed: what this page is for */
-.intro {
-  margin-bottom: 14px;
+/* Compact feed explanation. Details stay behind the help button until requested. */
+.feed-intro {
+  margin-bottom: 12px;
 }
-.intro h2 {
-  margin: 0 0 4px;
-  font-size: 1.2rem;
-  line-height: 1.25;
+.feed-intro-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
-.intro p {
+.feed-intro-summary p {
   margin: 0;
   color: var(--text-muted);
   font-size: 0.88rem;
-  line-height: 1.45;
 }
-.score-explainer { margin: 4px 0; color: var(--text-muted); font-size: .8rem; }
-.score-explainer summary { cursor: pointer; }
-.score-explainer p { margin-top: 4px; }
+.help-button {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--text-muted);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.help-button:hover,
+.help-button[aria-expanded="true"] {
+  border-color: var(--blue-dark);
+  color: var(--blue-dark);
+}
+.feed-help {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-left: 2px solid var(--blue);
+  background: var(--surface);
+}
+.feed-help p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+.feed-help .text-link {
+  margin-top: 4px;
+}
+.feed-help .small {
+  margin-top: 6px;
+}
 .sort-hint {
   margin: -6px 0 12px;
   color: var(--text-muted);
@@ -509,6 +543,28 @@ a.tile:hover h3,
   border-radius: var(--radius);
   object-fit: cover;
 }
+.detail-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.detail-title-row h1 {
+  min-width: 0;
+  margin-bottom: 2px;
+}
+.detail-title-row .help-button {
+  flex: none;
+}
+.detail-context-help {
+  margin: 4px 0 10px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--blue);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
 .facts {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -580,7 +636,7 @@ a.tile:hover h3,
 .place-heading-line { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 0 10px; }
 .place-heading-line p { margin: 0; font-size: 0.9rem; min-width: 0; }
 .place-heading-line a { flex: none; font-size: 0.9rem; font-weight: 600; }
-.place-heading-line .directions-button { color: var(--blue-dark); border-color: var(--blue); }
+.directions-button { color: var(--blue-dark); border-color: var(--blue); }
 .simple-header { position: relative; }
 .profile-settings { position: absolute; right: 12px; }
 .settings-section { margin-top: 4px; }
@@ -1126,4 +1182,9 @@ a.tile:hover h3,
 /* Issue filters (neighbourhood, category, My votes) */
 .home-header .issue-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: end; padding: 6px 12px 10px; overflow: visible; mask-image: none; }
 .issue-filters label { display: grid; gap: 2px; min-width: 0; color: var(--text-muted); font-size: 0.72rem; font-weight: 600; }
-.issue-filters select { width: 100%; min-width: 0; min-height: 36px; padding: 4px 8px; border: none; border-radius: 9999px; background: var(--surface-muted); color: var(--text); font-size: 0.85rem; text-overflow: ellipsis; }
+.issue-filters select { width: 100%; min-width: 0; min-height: 36px; padding: 4px 8px; border: none; border-radius: 9999px; background: var(--surface-muted); color: var(--text); font-size: 0.85rem; text-overflow: ellipsis; color-scheme: dark; }
+.issue-filters select option { background: var(--surface); color: var(--text); }
+:root[data-theme="light"] .issue-filters select { color-scheme: light; }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .issue-filters select { color-scheme: light; }
+}

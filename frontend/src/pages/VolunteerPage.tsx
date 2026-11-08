@@ -92,7 +92,7 @@ export default function VolunteerPage() {
         {event && (
           <>
             <VolunteerCard event={event} />
-            <PlaceSection lat={event.lat} lng={event.lng} label={`${event.location}, ${event.localArea}`} />
+            <PlaceSection lat={event.lat} lng={event.lng} label={`${event.location}, ${event.localArea}`} website={event.signupUrl} />
             <Discussion type="event" id={event.id} />
           </>
         )}
