@@ -105,7 +105,7 @@
                       "expression": "`hotspots`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
@@ -116,7 +116,10 @@
                 "x": {
                   "fieldName": "local_area",
                   "scale": {
-                    "type": "categorical"
+                    "type": "categorical",
+                    "sort": {
+                      "by": "y-reversed"
+                    }
                   },
                   "displayName": "local_area"
                 },
@@ -127,6 +130,11 @@
                   },
                   "displayName": "hotspots"
                 }
+              },
+              "mark": {
+                "colors": [
+                  "#2f7a2a"
+                ]
               },
               "frame": {
                 "showTitle": true,
@@ -324,7 +332,7 @@
                       "expression": "`median_days`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
@@ -335,7 +343,10 @@
                 "x": {
                   "fieldName": "category",
                   "scale": {
-                    "type": "categorical"
+                    "type": "categorical",
+                    "sort": {
+                      "by": "y-reversed"
+                    }
                   },
                   "displayName": "category"
                 },
@@ -380,6 +391,14 @@
                     {
                       "name": "track",
                       "expression": "`track`"
+                    },
+                    {
+                      "name": "category",
+                      "expression": "`category`"
+                    },
+                    {
+                      "name": "request_type",
+                      "expression": "`request_type`"
                     }
                   ],
                   "disaggregated": true
@@ -393,10 +412,16 @@
                 "coordinates": {
                   "latitude": {
                     "fieldName": "latitude",
+                    "scale": {
+                      "type": "quantitative"
+                    },
                     "displayName": "latitude"
                   },
                   "longitude": {
                     "fieldName": "longitude",
+                    "scale": {
+                      "type": "quantitative"
+                    },
                     "displayName": "longitude"
                   }
                 },
@@ -416,7 +441,17 @@
                     ]
                   },
                   "displayName": "track"
-                }
+                },
+                "extraTooltip": [
+                  {
+                    "fieldName": "category",
+                    "displayName": "category"
+                  },
+                  {
+                    "fieldName": "request_type",
+                    "displayName": "request_type"
+                  }
+                ]
               },
               "frame": {
                 "showTitle": true,
