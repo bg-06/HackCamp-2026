@@ -6,11 +6,12 @@ export interface Auth0Settings { issuer: string; audience: string }
 
 // A verified caller: a resident (Auth0 user) or a machine (client-credentials app such as the agent).
 export type Principal =
-  | { kind: 'resident'; sub: string }
+  | { kind: 'resident'; sub: string; permissions: ReadonlySet<string> }
   | { kind: 'machine'; sub: string; scopes: ReadonlySet<string> }
 
 const subjects = new WeakMap<Request, string>()
 const machines = new WeakMap<Request, Extract<Principal, { kind: 'machine' }>>()
+const permissions = new WeakMap<Request, ReadonlySet<string>>()
 
 // Machine tokens are accepted only on these paths; resident tokens are refused there.
 const MACHINE_PATH = /^\/agent(?:\/|$)/
@@ -31,6 +32,11 @@ export function userId(req: Request): string {
   const subject = viewerId(req)
   if (!subject) throw new ApiError(401, 'Sign in required')
   return subject
+}
+
+export function requirePermission(req: Request, permission: string): void {
+  userId(req)
+  if (!permissions.get(req)?.has(permission)) throw new ApiError(403, `Missing permission ${permission}`)
 }
 
 /** The calling machine's client id, after checking its token carries `scope`. */
@@ -60,7 +66,8 @@ export function createTokenVerifier(settings: Auth0Settings, keys?: JWTVerifyGet
       const scopes = typeof payload.scope === 'string' ? payload.scope.split(' ').filter(Boolean) : []
       return { kind: 'machine', sub: payload.sub, scopes: new Set(scopes) }
     }
-    return { kind: 'resident', sub: payload.sub }
+    const granted = Array.isArray(payload.permissions) ? payload.permissions.filter((p): p is string => typeof p === 'string') : []
+    return { kind: 'resident', sub: payload.sub, permissions: new Set(granted) }
   }
 }
 
@@ -97,6 +104,7 @@ export function createAuthMiddleware(settings: Auth0Settings, keys?: JWTVerifyGe
       } else {
         if (machinePath) return void res.status(403).json({ error: 'A machine access token is required' })
         subjects.set(req, principal.sub)
+        permissions.set(req, principal.permissions)
       }
       next()
     } catch (err) {

@@ -5,7 +5,7 @@ import express, { type NextFunction, type Request, type Response, type RequestHa
 import { cellToLatLng, isValidCell, latLngToCell, getResolution } from 'h3-js'
 import type { Sql, TransactionSql } from 'postgres'
 import { parseNewEvent, ApiError, pageLimit, parseDisplayName, parseSuggestion, parseBriefing } from './validation.js'
-import { requireScope, userId, viewerId } from './auth.js'
+import { requirePermission, requireScope, userId, viewerId } from './auth.js'
 
 function centre(h3: string | null): { lat?: number; lng?: number } {
   if (!h3 || !isValidCell(h3)) return {}
@@ -234,14 +234,27 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
       lat = input.lat!; lng = input.lng!; h3 = latLngToCell(lat, lng, 9)
     }
     const id = await sql.begin(async tx => {
+      let org: { id: string; name: string } | undefined
+      if (input.suggestionId) {
+        if (!/^\d+$/.test(input.suggestionId) || !hotspotId) throw new ApiError(400, 'invalid suggestion')
+        const [suggestion] = await tx<{ id: string; hotspot_id: string; org_id: string; name: string }[]>`
+          SELECT p.id, p.hotspot_id, p.org_id, o.name FROM posts p
+          JOIN orgs o ON o.id = p.org_id JOIN org_members m ON m.org_id = o.id
+          WHERE p.id = ${input.suggestionId} AND p.kind = 'suggestion' AND p.status = 'pending'
+            AND m.user_id = ${user} AND m.role = 'admin' AND m.approved FOR UPDATE OF p`
+        if (!suggestion) throw new ApiError(404, 'pending suggestion not found')
+        if (suggestion.hotspot_id !== hotspotId) throw new ApiError(409, 'suggestion hotspot has changed')
+        org = { id: suggestion.org_id, name: suggestion.name }
+      }
       const [event] = await tx<{ id: string }[]>`INSERT INTO events
-        (kind, title, organiser, category, starts_at, ends_at, location, local_area, spots_total,
+        (kind, title, organiser, org_id, category, starts_at, ends_at, location, local_area, spots_total,
          what_to_bring, latitude, longitude, h3_r9, hotspot_id, created_by, is_sample)
-        VALUES ('hotspot', ${input.title},
-                coalesce((SELECT display_name FROM profiles WHERE user_id = ${user}), 'A neighbour'), ${category}, ${input.startsAt}, ${input.endsAt},
+        VALUES (${org ? 'org' : 'hotspot'}, ${input.title},
+                ${org?.name ?? null}, ${org?.id ?? null}, ${category}, ${input.startsAt}, ${input.endsAt},
                 ${input.location}, ${localArea}, ${input.spotsTotal}, ${input.whatToBring ?? null},
                 ${lat}, ${lng}, ${h3}, ${hotspotId}, ${user}, false) RETURNING id`
       await tx`INSERT INTO rsvps (event_id, user_id) VALUES (${event!.id}, ${user})`
+      if (input.suggestionId) await tx`UPDATE posts SET status = 'accepted' WHERE id = ${input.suggestionId}`
       return event!.id
     })
     const [row] = await eventQuery(user, sql`e.id = ${id}`)
@@ -446,13 +459,48 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
   }
 
   // ---------- Block Steward agent (Auth0 machine tokens, agent/README.md) ----------
+  // Membership is granted by a moderator after an out-of-band identity check.
+  app.get('/me/organizations', async (req, res) => {
+    const rows = await sql`SELECT o.id, o.name, o.local_area FROM orgs o JOIN org_members m ON m.org_id = o.id
+      WHERE m.user_id = ${userId(req)} AND m.role = 'admin' AND m.approved ORDER BY o.name`
+    res.json(rows)
+  })
+
+  app.put('/moderation/organizations/:orgId/members/:memberId', async (req, res) => {
+    requirePermission(req, 'moderate:organizations')
+    if (typeof req.body?.approved !== 'boolean') throw new ApiError(400, 'approved must be a boolean')
+    const [org] = await sql`SELECT id FROM orgs WHERE id = ${req.params.orgId}`
+    if (!org) throw new ApiError(404, 'organization not found')
+    await sql`INSERT INTO org_members (org_id, user_id, role, approved)
+      VALUES (${req.params.orgId}, ${req.params.memberId}, 'admin', ${req.body.approved})
+      ON CONFLICT (org_id, user_id) DO UPDATE SET role = 'admin', approved = EXCLUDED.approved`
+    res.json({ approved: req.body.approved })
+  })
+
+  app.get('/me/suggestions', async (req, res) => {
+    const rows = await sql`SELECT p.id::text, p.org_id, o.name AS org_name, p.title, p.body, p.payload, p.created_at
+      FROM posts p JOIN orgs o ON o.id = p.org_id JOIN org_members m ON m.org_id = o.id
+      WHERE m.user_id = ${userId(req)} AND m.role = 'admin' AND m.approved
+        AND p.kind = 'suggestion' AND p.status = 'pending' ORDER BY p.created_at DESC, p.id DESC LIMIT 100`
+    res.json(rows)
+  })
+
+  app.post('/me/suggestions/:id/dismiss', async (req, res) => {
+    if (!/^\d+$/.test(req.params.id)) throw new ApiError(404, 'pending suggestion not found')
+    const [row] = await sql`UPDATE posts p SET status = 'dismissed'
+      WHERE p.id = ${req.params.id} AND p.kind = 'suggestion' AND p.status = 'pending'
+        AND EXISTS (SELECT 1 FROM org_members m WHERE m.org_id = p.org_id AND m.user_id = ${userId(req)}
+          AND m.role = 'admin' AND m.approved) RETURNING p.id`
+    if (!row) throw new ApiError(404, 'pending suggestion not found')
+    res.json({ dismissed: true })
+  })
   // Suggestions are stored 'pending' for org admins to accept or dismiss; briefings are published.
   // A repeat is answered 200 with stored: 0, so the agent doesn't count it as a failed send.
 
   app.post('/agent/suggestions', async (req, res) => {
     requireScope(req, 'suggestions:post')
     const s = parseSuggestion(req.body)
-    // The agent writes "<h3>:<type>", the app "<h3>|<type>"; H3 ids have no ':' so the first one is the separator.
+    // Legacy agent IDs are normalized by parseSuggestion.
     const hotspotId = s.hotspotId
     const result = await sql.begin(async tx => {
       if (s.orgIds.length) {
