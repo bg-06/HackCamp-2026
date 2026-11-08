@@ -298,7 +298,7 @@
   color: var(--text);
 }
 
-/* ---------- Bottom navigation: icons with labels, accent + in the middle ---------- */
+/* ---------- Bottom navigation: icons with labels ---------- */
 .bottom-nav {
   flex: none;
   align-items: center;
@@ -314,18 +314,6 @@
 .bottom-nav a.active {
   color: var(--text);
   font-weight: 600;
-}
-.bottom-nav a.nav-plus-wrap {
-  justify-content: center;
-}
-.nav-plus {
-  display: grid;
-  place-items: center;
-  width: 58px;
-  height: 42px;
-  border-radius: 12px;
-  background: var(--accent);
-  color: var(--on-accent);
 }
 
 /* ---------- Detail pages: map header with the name set big over it ---------- */
@@ -928,7 +916,6 @@ a.tile:hover h3,
 .help-card,
 .issue-row,
 .list-row-head,
-.nav-plus,
 .pill-button,
 .action-button,
 .outline-button,
@@ -941,7 +928,7 @@ a.tile:hover h3,
 .issue-row:active {
   transform: scale(0.98);
 }
-.nav-plus-wrap:active .nav-plus,
+
 .pill-button:active,
 .action-button:active,
 .outline-button:active,
@@ -961,7 +948,6 @@ a.tile:hover h3,
   .help-card,
   .issue-row,
   .list-row-head,
-  .nav-plus,
   .pill-button,
   .action-button,
   .outline-button,
