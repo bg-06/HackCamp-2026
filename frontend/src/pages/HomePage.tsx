@@ -51,6 +51,7 @@ export default function HomePage() {
     requireSignIn,
   } = useFeed();
   const [sortOpen, setSortOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [area, setArea] = useState(() => localStorage.getItem('issue-area') ?? '');
   const [category, setCategory] = useState('');
   const [myVotesOnly, setMyVotesOnly] = useState(false);
@@ -186,6 +187,7 @@ export default function HomePage() {
   }
 
   const locationNote = LOCATION_NOTES[locStatus];
+  const helpId = `${tab}-feed-help`;
 
   return (
     <div className="page">
@@ -252,31 +254,41 @@ export default function HomePage() {
           <p className="sort-hint">Distances are from City Hall. Turn on Near me for distances from you.</p>
         )}
 
-        {tab === "volunteer" ? (
-          <section className="intro">
-            <h2>Help out in {CITY.name}</h2>
-            <p>
-              Cleanups and other ways to help, run by the City, local groups and neighbours. Many are on blocks where the same problem keeps
-              getting reported.
-            </p>
-            {sampleCount > 0 && (
-              <p className="muted small">
-                {sampleCount === events.items?.length ? "All" : `${sampleCount} of ${events.items?.length}`} listings are samples, not yet
-                confirmed with the organiser.
+        <section className="feed-intro">
+          <div className="feed-intro-summary">
+            <p>{tab === "volunteer" ? `Find ways to help around ${CITY.name}.` : "Vote on the City issues that matter most."}</p>
+            <button
+              className="help-button"
+              type="button"
+              aria-label={`${helpOpen ? "Hide" : "Show"} ${tab} help`}
+              aria-expanded={helpOpen}
+              aria-controls={helpId}
+              onClick={() => setHelpOpen(!helpOpen)}
+            >
+              ?
+            </button>
+          </div>
+          {tab === "issues" && <VotesLeft />}
+          {helpOpen && (
+            <div className="feed-help" id={helpId}>
+              <p>
+                {tab === "volunteer"
+                  ? "Browse opportunities from local groups and neighbours, including help organized around recurring problem spots."
+                  : "Filter by neighbourhood or use Near me. Priority scores combine votes, time open and repeat reports."}
               </p>
-            )}
-          </section>
-        ) : (
-          <section className="intro">
-            <h2>What needs fixing in {CITY.name}</h2>
-            <p>Prioritize issues the City can fix.</p>
-            <VotesLeft />
-            <p className="muted small">Filter by neighbourhood or turn on Near me. The number is a priority score: votes, plus how long it’s been open and how often it’s reported.</p>
-            <a className="text-link" href={VAN311_URL} target="_blank" rel="noopener noreferrer">
-              Report something new in Van311 ↗
-            </a>
-          </section>
-        )}
+              {tab === "issues" && (
+                <a className="text-link" href={VAN311_URL} target="_blank" rel="noopener noreferrer">
+                  Report something new in Van311 ↗
+                </a>
+              )}
+              {tab === "volunteer" && sampleCount > 0 && (
+                <p className="muted small">
+                  {sampleCount === events.items?.length ? "All" : `${sampleCount} of ${events.items?.length}`} listings are samples, not yet confirmed with the organiser.
+                </p>
+              )}
+            </div>
+          )}
+        </section>
 
         {tab === "volunteer" && openHotspots.length > 0 && (
           <section className="needs-help" aria-labelledby="needs-help-heading">
