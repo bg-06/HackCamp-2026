@@ -2,10 +2,18 @@
 -- Views that read the app's Postgres tables (votes, events) live in rankings.sql instead,
 -- so the pipeline still runs before the app has created those tables.
 
--- One AI call per distinct request type (~256), not per row.
+-- Category and AI track per request type. Stored labels (bbb.gold.type_labels) are used as they
+-- are, because ai_classify gives different answers from run to run. Only request types not stored
+-- yet get an AI call; the freeze_type_labels job task then stores them, so each type is labelled once.
 CREATE OR REFRESH MATERIALIZED VIEW bbb.gold.type_categories
 COMMENT 'Resident-friendly category and AI track (neighbours / city / none) for each City 311 request type'
-AS SELECT request_type,
+AS WITH types AS (
+  SELECT DISTINCT request_type FROM bbb.silver.t311_cases_current WHERE request_type IS NOT NULL
+)
+SELECT t.request_type, l.category, l.ai_track
+FROM types t JOIN bbb.gold.type_labels l USING (request_type)
+UNION ALL
+SELECT request_type,
        ai_classify(request_type, ARRAY(
          'Roads and Sidewalks', 'Garbage and Dumping', 'Graffiti', 'Noise', 'Parks and Trees',
          'Water and Sewer', 'Lighting and Signals', 'Parking', 'Animals',
@@ -18,7 +26,7 @@ AS SELECT request_type,
          WHEN 'litter or graffiti volunteers can clean up' THEN 'neighbours'
          WHEN 'outdoor repair only City crews can do' THEN 'city'
          ELSE 'none' END AS ai_track
-FROM (SELECT DISTINCT request_type FROM bbb.silver.t311_cases_current WHERE request_type IS NOT NULL);
+FROM types LEFT ANTI JOIN bbb.gold.type_labels USING (request_type);
 
 -- Track = hand override (bbb.gold.track_overrides, created by setup.sql) if present, else the AI's.
 CREATE OR REFRESH MATERIALIZED VIEW bbb.gold.cases_enriched

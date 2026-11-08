@@ -27,8 +27,8 @@ The big picture is in [plan.md](../plan.md). Read plan.md section 0 ("Product di
 
 | Thing | State on 2026-11-08 |
 |---|---|
-| `app/` | TypeScript ingest by a teammate: `scripts/ingest.ts`, `scripts/migrate.ts`, `lib/db.ts`, `db/migrations/001_ingest.sql`. It loads Vancouver open data into Postgres |
-| Postgres tables | `raw_311_requests` (311 data; loading is in progress), `road_projects`, `local_areas`, `ingest_state`, `events` (empty, 4 columns), `votes` (empty, 2 columns) |
+| `app/` | TypeScript ingest by a teammate: `scripts/ingest.ts`, `scripts/load-311-history.ts`, `scripts/migrate.ts`, `lib/db.ts`, `db/migrations/001_ingest.sql`. It loads Vancouver open data into Postgres. `001_ingest.sql` matches the live database (checked 2026-11-08) |
+| Postgres tables | `raw_311_requests` (about 1.35 million rows, 2022-01 to 2026-11, fully loaded), `road_projects`, `local_areas`, `ingest_state`, `events` (empty, 4 columns), `votes` (empty, 2 columns), and the `gold_*` tables filled by Databricks |
 | `frontend/` | Not on `main` yet. It's on branch `origin/frontend-mock`: a Vite + React app with a home feed that uses mock data. Its `src/api/client.ts` already calls `GET /issues`, `GET /events`, `POST/DELETE /issues/:id/me-too` and `POST/DELETE /events/:id/going` |
 | `databricks/` | Done and deployed. Builds the `gold` tables and copies the ones the app needs into Postgres `gold_*` tables (`publish_gold`, part of the `bbb_daily` job) |
 | API, Auth0, agent, n8n | Not started |
@@ -81,25 +81,18 @@ The big picture is in [plan.md](../plan.md). Read plan.md section 0 ("Product di
 
 ---
 
-## Step 2: Merge the open Databricks PR
+## Step 2: Merge the open Databricks PR (DONE)
 
-- **Who:** the user (Roshan) or someone they ask
-- **Before you start:** nothing
-- **Do:** open https://github.com/bg-06/HackCamp-2026/pull/9 and merge it. It contains fixes to the Databricks setup files and doesn't touch `app/` or `frontend/`.
-- **Check:** the PR shows "Merged".
-- **If it fails:** if GitHub reports a conflict, ask the user. Don't resolve conflicts in `databricks/` yourself.
+**Already done on 2026-11-08** (PR #9 merged). Nothing to do; go to step 3.
 
 ---
 
-## Step 3: Wait for the ingest owner to push their real code
+## Step 3: Confirm the ingest code and the 311 load are in place (DONE, re-check only)
 
-**Why this step exists:** the tables in Postgres were created by a newer version of the ingest that isn't on GitHub yet. The `001_ingest.sql` on `main` doesn't match the database (for example it expects a PostGIS extension that this server doesn't have). **Running `npm --prefix app run db:migrate` before this step is done would fail and could leave the database half-changed.**
+**Already done on 2026-11-08:** the ingest owner merged the code that's actually running (PR #13, including a `001_ingest.sql` that matches the live tables, with no PostGIS), and the 311 load finished. Run the read-only checks below to confirm, then go to step 4.
 
-- **Who:** the ingest owner (teammate). An AI should not do this step; it should ask the user to get it done.
-- **Do (ingest owner):**
-  1. Commit and push the ingest version that's actually running, including the `001_ingest.sql` that matches the live tables, and get it merged to `main`.
-  2. Let the 311 load finish.
-- **Check (anyone, read-only):**
+- **Who:** anyone (read-only)
+- **Check:**
   ```bash
   git switch main && git pull
   ```
@@ -367,13 +360,19 @@ Plan.md section 7 has the later Auth0 work: roles (`org_admin`, `moderator`) and
 
 ## Step 14: n8n workflows (n8n prize)
 
+**Updated direction:** the Databricks event-impact/vote refresh uses the existing
+`bbb_refresh_rankings` job on a native 15-minute schedule. The app writes completed
+events to Postgres; no n8n event-done webhook is required. See `databricks/README.md`
+and `databricks/operations/verify_event_impact.py`. n8n remains optional for the
+notification workflows and prize entry below.
+
 - **Who:** n8n owner. Plan.md section 9 has the details.
 - **Before you start:** step 11 part 5 is done.
 - **Do:** three workflows; export each as JSON into `n8n/`:
   1. *New event:* webhook from `POST /events` → read who follows that area (`follows`) → email or Discord.
-  2. *Event done:* webhook from `POST /events/:id/done` → Databricks Jobs API `run-now` for job id `427293815798960` (`bbb_refresh_rankings`). Needs a Databricks token from the user.
+  2. *Event done:* handled by the native Databricks schedule. For an immediate demo refresh, run `databricks bundle run bbb_refresh_rankings` from `databricks/`.
   3. *Hotspot alert for orgs:* daily → new rows in `gold_help_hotspots` → email org admins in that area.
-- **Check:** marking an event done starts a run of `bbb_refresh_rankings` in Databricks.
+- **Check for impact:** after marking an event done, the next successful scheduled run publishes its impact row. Run `python databricks/operations/verify_event_impact.py --event-id <id>` to check it.
 
 ---
 
@@ -383,9 +382,9 @@ Plan.md section 7 has the later Auth0 work: roles (`org_admin`, `moderator`) and
 - **Before you start:** step 3 is done (all 311 data loaded) and step 5 is merged.
 - **Do:**
   1. Remove the table creation from `databricks/notebooks/publish_gold.py` (the `DDL_PATH` part), since step 5 made the ingest create the `gold_*` tables.
-  2. Run `bbb_daily` (`cd databricks && databricks bundle run bbb_daily`) and check the `gold_*` tables in Postgres hold data for all of Vancouver.
+  2. Run `bbb_daily` (`cd databricks && databricks bundle run bbb_daily`) and check the `gold_*` tables in Postgres hold data for all of Vancouver. (First full run done 2026-11-08 after the full 311 load: `gold_track2_issues` 3,846, `gold_hotspots_h3` 1,211, `gold_help_hotspots` 1,634, `gold_type_categories` 256, `gold_area_summaries` 22. Run it again after item 1.)
   3. Unpause the `bbb_daily` schedule.
-  4. Re-check the Track 1 request types against the full data, and build the AI/BI dashboard and Genie space (plan.md section 5.9).
+  4. Re-check the Track 1 request types against the full data, and build the AI/BI dashboard and Genie space by following `databricks/dashboards/README.md` and `databricks/genie/instructions.md`.
 
 ---
 
