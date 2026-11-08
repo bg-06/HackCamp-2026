@@ -2,11 +2,12 @@
 .profile-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   padding: 14px 12px 4px 22px;
 }
 .profile-bar h1 {
+  flex: 1;
+  min-width: 0;
   margin: 0;
   overflow: hidden;
   font-size: 1.6rem;
