@@ -26,19 +26,19 @@ BRONZE = "bbb.bronze.t311_raw"
 SILVER = "bbb.silver.t311_cases"
 CURRENT = "bbb.silver.t311_cases_current"
 
+# Columns of raw_311_requests as created by app/db/migrations/001_ingest.sql (TypeScript ingest).
+# `geom` (PostGIS) and `source_record` (jsonb) are left out: lat/lon carry the same data, and
+# federation doesn't need to map those types.
 RAW_COLS = [
-    "id", "department", "service_request_type", "status", "closure_reason",
+    "ingest_id", "source_hash", "department", "service_request_type", "status", "closure_reason",
     "service_request_open_timestamp", "service_request_close_date", "last_modified_timestamp",
-    "address", "local_area", "channel", "latitude", "longitude", "fetched_at",
+    "address", "local_area", "channel", "latitude", "longitude", "ingested_at",
 ]
-
-# No natural key exists (see docs/data-shape.md); ~1% of rows collide and get merged in CURRENT.
-KEY_COLS = ["department", "request_type", "opened_at", "address", "local_area", "channel", "latitude", "longitude"]
 
 
 # ---------------------------------------------------------------- Bronze
 @dp.table(name=BRONZE, comment="311 service requests as landed in Postgres (raw_311_requests)")
-@dp.expect("has_postgres_id", "id IS NOT NULL")
+@dp.expect("has_source_hash", "source_hash IS NOT NULL")
 def t311_raw():
     return spark.read.table(RAW_SOURCE).select(*RAW_COLS)
 
@@ -50,8 +50,12 @@ def t311_raw():
 # Only judged on geocoded rows; ungeocoded ones are already counted by has_location.
 @dp.expect("in_vancouver", "latitude IS NULL OR (latitude BETWEEN 49.19 AND 49.32 AND longitude BETWEEN -123.27 AND -123.02)")
 def t311_cases():
-    df = spark.read.table(BRONZE).select(
-        "id",
+    # case_key = the ingest's source_hash: sha256 of department, type, open time, address, area,
+    # channel, lat, lon (no public case ID exists; ~1% of rows collide and merge in CURRENT).
+    # Using it means Databricks and Postgres' raw_311_current agree on what one case is.
+    return spark.read.table(BRONZE).select(
+        F.col("ingest_id").alias("id"),
+        F.col("source_hash").alias("case_key"),
         "department",
         F.col("service_request_type").alias("request_type"),
         "status",
@@ -65,14 +69,11 @@ def t311_cases():
         "channel",
         F.col("latitude").cast("double").alias("latitude"),
         F.col("longitude").cast("double").alias("longitude"),
-    )
-    key = F.sha2(F.concat_ws("|", *[F.coalesce(F.col(c).cast("string"), F.lit("")) for c in KEY_COLS]), 256)
-    return df.withColumn("case_key", key).withColumn(
-        "h3_r9", F.expr("h3_longlatash3string(longitude, latitude, 9)")
+        F.expr("h3_longlatash3string(longitude, latitude, 9)").alias("h3_r9"),
     )
 
 
-@dp.table(name=CURRENT, comment="One row per case_key: the latest version (ties broken by Postgres id)")
+@dp.table(name=CURRENT, comment="One row per case_key: the latest version (ties broken by Postgres ingest_id)")
 def t311_cases_current():
     w = Window.partitionBy("case_key").orderBy(F.col("modified_at").desc_nulls_last(), F.col("id").desc())
     return (

@@ -419,19 +419,21 @@ catalog: bbb_app                 # our Postgres, as a Lakehouse Federation forei
 ```
 
 ```sql
--- Postgres, in app/db/migrations/
-CREATE TABLE raw_311_requests (
-  id bigserial PRIMARY KEY,
-  department text, service_request_type text, status text, closure_reason text,
+-- Postgres: app/db/migrations/001_ingest.sql (TypeScript ingest, docs/ingest.md). Columns Databricks reads:
+raw_311_requests (
+  ingest_id bigserial PRIMARY KEY,           -- tie-breaker for "latest version"
+  source_hash text NOT NULL,                 -- sha256 of the identity fields; Databricks uses it as case_key
+  department, service_request_type, status, closure_reason,
   service_request_open_timestamp timestamptz, service_request_close_date date,
-  last_modified_timestamp timestamptz, address text, local_area text, channel text,
+  last_modified_timestamp timestamptz, address, local_area, channel,
   latitude double precision, longitude double precision,
-  fetched_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX ON raw_311_requests (last_modified_timestamp);
+  ingested_at timestamptz,
+  -- also geom (PostGIS point) and source_record (jsonb): not read by Databricks
+  UNIQUE (source_hash, last_modified_timestamp)
+)
 ```
 
-The table is append-only: a case that changes shows up again with a newer `last_modified_timestamp`, and silver keeps the latest version. The newest `last_modified_timestamp` doubles as the fetch watermark, so there's no separate watermark table.
+The table is append-only: a case that changes shows up again with a newer `last_modified_timestamp`, and silver keeps the latest version. The ingest keeps its own cursor in `ingest_state` and also offers a `raw_311_current` view (latest per `source_hash`) for the app.
 
 ### 5.3 Ingestion task
 
@@ -507,7 +509,7 @@ def t311_cases_current():
             .withColumn("rn", F.row_number().over(w)).filter("rn = 1").drop("rn"))
 ```
 
-**Built (branch `databricks-postgres-pipeline`):** `databricks/pipelines/t311_pipeline.py` now uses the code above. The source table is a pipeline setting (`bbb.raw_311_source`, default `bbb_app.public.raw_311_requests`). The tables already deployed are the old streaming tables, so the first run after deploying needs a full refresh (`databricks bundle run t311_pipeline --full-refresh-all`).
+**Built (branch `databricks-postgres-pipeline`):** `databricks/pipelines/t311_pipeline.py` now uses the code above, adapted to the ingest's columns: `ingest_id` instead of `id`, and the ingest's `source_hash` as `case_key` (same identity fields), so Databricks and `raw_311_current` agree on what one case is. The source table is a pipeline setting (`bbb.raw_311_source`, default `bbb_app.public.raw_311_requests`). The tables already deployed are the old streaming tables, so the first run after deploying needs a full refresh (`databricks bundle run t311_pipeline --full-refresh-all`).
 
 If the pipeline can't read `bbb_app` directly, add a SQL task before `pipeline_refresh` that copies it into Delta (`CREATE OR REPLACE TABLE bbb.bronze.t311_raw AS SELECT * FROM bbb_app.public.raw_311_requests`) and start the pipeline at silver.
 
