@@ -1,6 +1,6 @@
-import { ChevronDown, ExternalLink, Mail, MapPin } from "lucide-react";
+import { ChevronDown, MapPin } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { Navigate, useParams } from "react-router-dom";
 import { getTrack2Issues, getVolunteerEvents, setVote, USE_MOCK } from "../api/client";
 import EventTile from "../components/EventTile";
 import IssueTile from "../components/IssueTile";
@@ -25,8 +25,7 @@ function errorText(e: unknown) {
 
 export default function HomePage() {
   const { tab: tabParam } = useParams();
-  const navigate = useNavigate();
-  const tab: FeedTab = tabParam === "fix" ? "fix" : "help";
+  const tab: FeedTab = tabParam === "issues" ? "fix" : "help";
 
   const [events, setEvents] = useState<Loaded<VolunteerEvent>>({});
   const [issues, setIssues] = useState<Loaded<Track2Issue>>({});
@@ -84,8 +83,8 @@ export default function HomePage() {
 
   const closeSheet = useCallback(() => setSheetOpen(false), []);
 
-  // Only "/" and "/fix" belong to this page.
-  if (tabParam !== undefined && tabParam !== "fix") return <Navigate to="/" replace />;
+  // Only "/" and "/issues" belong to this page.
+  if (tabParam !== undefined && tabParam !== "issues") return <Navigate to="/" replace />;
 
   const current = tab === "help" ? events : issues;
   const loading = !current.items && !current.error;
@@ -106,10 +105,6 @@ export default function HomePage() {
     ctx,
   );
   const totalVotes = (issues.items ?? []).reduce((n, i) => n + issueScore(i).up + issueScore(i).down, 0);
-
-  function changeTab(next: FeedTab) {
-    navigate(next === "fix" ? "/fix" : "/");
-  }
 
   function pickSort(key: SortKey) {
     (tab === "help" ? setEventSort : setIssueSort)(key);
@@ -173,8 +168,7 @@ export default function HomePage() {
     <div className="page">
       <header className={`home-header track-${tab}`}>
         <TopBar
-          tab={tab}
-          onTabChange={changeTab}
+          title={tab === "help" ? "Volunteer" : "Issues"}
           filtersOpen={filtersOpen}
           filtersActive={sort !== "recommended"}
           onToggleFilters={() => setFiltersOpen(!filtersOpen)}
@@ -196,7 +190,7 @@ export default function HomePage() {
             className="search-input"
             type="search"
             aria-label="Search"
-            placeholder={tab === "fix" ? "Search an issue or street" : "Search events or organisers"}
+            placeholder={tab === "fix" ? "Search an issue or street" : "Search ways to help or organisers"}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             autoFocus
@@ -221,32 +215,23 @@ export default function HomePage() {
 
       <main className="page-content">
         {tab === "help" ? (
-          <section className="intro-card track1">
-            <h1>Ways to help in {city.name}</h1>
-            <p>Volunteer events from the City, local groups and neighbours, often right where the same problem keeps getting reported.</p>
-            {events.items && (
-              <p className="intro-count">
-                {events.items.length} upcoming {events.items.length === 1 ? "event" : "events"}
-              </p>
-            )}
+          <section className="intro">
+            <h2>Help out in {city.name}</h2>
+            <p>
+              Cleanups and other ways to help, run by the City, local groups and neighbours. Many are on blocks where the same problem keeps
+              getting reported.
+            </p>
           </section>
         ) : (
-          <section className="intro-card track2">
-            <h1>What needs fixing in {city.name}</h1>
+          <section className="intro">
+            <h2>What needs fixing in {city.name}</h2>
             <p>
-              Only the City can fix these. Vote <strong>▲</strong> if it affects you, <strong>▼</strong> if it's not a problem or already
-              fixed.
+              Only the City can fix these. Vote up if it affects you, down if it's not a problem or already fixed.
+              {issues.items && ` ${totalVotes} ${totalVotes === 1 ? "vote" : "votes"} so far.`}
             </p>
-            <p className="intro-count">
-              {issues.items && (
-                <span>
-                  {totalVotes} {totalVotes === 1 ? "vote" : "votes"} so far
-                </span>
-              )}
-              <a href={VAN311_URL} target="_blank" rel="noopener noreferrer">
-                Report something new in Van311 <ExternalLink size={12} aria-hidden="true" />
-              </a>
-            </p>
+            <a className="text-link" href={VAN311_URL} target="_blank" rel="noopener noreferrer">
+              Report something new in Van311 ↗
+            </a>
           </section>
         )}
 
@@ -266,7 +251,7 @@ export default function HomePage() {
 
         {current.error && (
           <div className="empty" role="alert">
-            <p>Couldn't load {tab === "fix" ? "issues" : "events"}. Check your connection and try again.</p>
+            <p>Couldn't load {tab === "fix" ? "issues" : "ways to help"}. Check your connection and try again.</p>
             <button className="chip-button" onClick={retry}>
               Try again
             </button>
@@ -275,15 +260,15 @@ export default function HomePage() {
 
         {tab === "help" && events.items && shownEvents.length === 0 && (
           <div className="empty">
-            <p>{q ? "No events match that yet." : "Nothing planned here yet. Start an event from a hotspot on the map."}</p>
+            <p>{q ? "Nothing matches that yet." : "No ways to help here yet. Start one from a hotspot on the map."}</p>
           </div>
         )}
 
         {tab === "help" && shownEvents.length > 0 && (
           <MasonryFeed
-            label="Events"
+            label="Ways to volunteer"
             items={shownEvents.map((e) => {
-              const ratio = coverRatio(e.id);
+              const ratio = coverRatio(e.id, Boolean(e.photoUrl));
               return {
                 key: e.id,
                 ratio,
@@ -321,7 +306,7 @@ export default function HomePage() {
               })}
             />
             <a className="action-button council" href={councilMailto()}>
-              <Mail size={16} aria-hidden="true" /> Send the top 5 to Council
+              Send the top 5 to Council
             </a>
             <p className="action-note center">Opens an email in your own mail app. You choose who to send it to.</p>
           </>

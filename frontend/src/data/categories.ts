@@ -56,7 +56,7 @@ export function categoryStyle(name: string): CategoryStyle {
 
 // Who runs the event. Each has its own colour, and the label always says it in words.
 export const KIND_LABELS: Record<EventKind, { label: string; className: string }> = {
-  city: { label: 'City event', className: 'kind-city' },
-  org: { label: 'Local org event', className: 'kind-org' },
+  city: { label: 'City program', className: 'kind-city' },
+  org: { label: 'Local group', className: 'kind-org' },
   hotspot: { label: 'Started from a hotspot', className: 'kind-hotspot' },
 }
