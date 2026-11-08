@@ -11,7 +11,7 @@ const STYLES = {
   light: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
   dark: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
 }
-const PIN = { light: '#d0103a', dark: '#e0193f' } // the app's accent in each theme
+const PIN = { light: '#2563eb', dark: '#3b82f6' } // the app's accent in each theme
 
 interface Props {
   lat: number
