@@ -31,7 +31,7 @@ The big picture is in [plan.md](../plan.md). Read plan.md section 0 ("Product di
 | Postgres tables | `raw_311_requests` (about 1.35 million rows, 2022-01 to 2026-11, fully loaded), `road_projects`, `local_areas`, `ingest_state`, `events` (empty, 4 columns), `votes` (empty, 2 columns), and the `gold_*` tables filled by Databricks |
 | `frontend/` | Not on `main` yet. It's on branch `origin/frontend-mock`: a Vite + React app with a home feed that uses mock data. Its `src/api/client.ts` already calls `GET /issues`, `GET /events`, `POST/DELETE /issues/:id/me-too` and `POST/DELETE /events/:id/going` |
 | `databricks/` | Done and deployed. Builds the `gold` tables and copies the ones the app needs into Postgres `gold_*` tables (`publish_gold`, part of the `bbb_daily` job) |
-| API, Auth0, agent, n8n | Not started |
+| API, Auth0, agent | Not started |
 
 **Decisions already made (don't revisit):**
 - The frontend is **React** (the Vite app in `frontend/`).
@@ -319,7 +319,7 @@ The big picture is in [plan.md](../plan.md). Read plan.md section 0 ("Product di
 - **If it fails:** "Callback URL mismatch" means the URLs in part 1 don't exactly match the browser address.
 - **Finish:** commit, push, PR "Add Auth0 sign-in". Never commit `.env` files.
 
-Plan.md section 7 has the later Auth0 work: roles (`org_admin`, `moderator`) and machine tokens for the agent and n8n. Do those in steps 13 and 14 when they're needed.
+Plan.md section 7 has the later Auth0 work: roles (`org_admin`, `moderator`) and the machine token for the agent. Do those in step 13 when they're needed.
 
 ---
 
@@ -358,21 +358,14 @@ Plan.md section 7 has the later Auth0 work: roles (`org_admin`, `moderator`) and
 
 ---
 
-## Step 14: n8n workflows (n8n prize)
+## Step 14: Event-impact refresh (Databricks jobs, no n8n)
 
-**Updated direction:** the Databricks event-impact/vote refresh uses the existing
-`bbb_refresh_rankings` job on a native 15-minute schedule. The app writes completed
-events to Postgres; no n8n event-done webhook is required. See `databricks/README.md`
-and `databricks/operations/verify_event_impact.py`. n8n remains optional for the
-notification workflows and prize entry below.
+We don't use n8n. All scheduled work runs as Databricks jobs.
 
-- **Who:** n8n owner. Plan.md section 9 has the details.
-- **Before you start:** step 11 part 5 is done.
-- **Do:** three workflows; export each as JSON into `n8n/`:
-  1. *New event:* webhook from `POST /events` → read who follows that area (`follows`) → email or Discord.
-  2. *Event done:* handled by the native Databricks schedule. For an immediate demo refresh, run `databricks bundle run bbb_refresh_rankings` from `databricks/`.
-  3. *Hotspot alert for orgs:* daily → new rows in `gold_help_hotspots` → email org admins in that area.
-- **Check for impact:** after marking an event done, the next successful scheduled run publishes its impact row. Run `python databricks/operations/verify_event_impact.py --event-id <id>` to check it.
+- **Who:** Roshan (Databricks owner) with the API owner.
+- **Before you start:** step 11 part 5 is done (`POST /events/:id/done` sets `done_at`).
+- **How it works:** the app writes completed events to Postgres. The `bbb_refresh_rankings` job runs every 15 minutes, recomputes rankings and event impact, and publishes them back to the `gold_*` tables. For an immediate refresh during the demo, run `databricks bundle run bbb_refresh_rankings` from `databricks/`.
+- **Check:** mark an event done, wait for the next successful run (or trigger one), then run `python databricks/operations/verify_event_impact.py --event-id <id>`.
 
 ---
 
