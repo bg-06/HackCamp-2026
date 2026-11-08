@@ -85,12 +85,12 @@ paths:
   /me/votes:
     get:
       security: [{BearerAuth: []}]
-      summary: Get remaining votes for the caller's Vancouver calendar day
+      summary: Get the caller's active vote allowance
       responses:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '503': {$ref: '#/components/responses/AuthUnavailable'}
         '200':
-          description: Daily allowance and next reset instant
+          description: Active votes and available slots
           content:
             application/json:
               schema: {$ref: '#/components/schemas/VoteBudget'}
@@ -218,7 +218,7 @@ paths:
     put:
       security: [{BearerAuth: []}]
       summary: Upvote an issue
-      description: Two new casts per user per Vancouver calendar day. Repeating an active upvote is idempotent. Removing and recasting consumes another allowance.
+      description: Up to two active votes per user. Repeating an active upvote is idempotent.
       requestBody:
         required: true
         content:
@@ -232,14 +232,14 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '503': {$ref: '#/components/responses/AuthUnavailable'}
         '200':
-          description: Vote recorded, with remaining daily allowance
+          description: Vote recorded, with available slots
           content:
             application/json:
               schema: {$ref: '#/components/schemas/VoteResult'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '404': {$ref: '#/components/responses/NotFound'}
         '429':
-          description: Daily vote limit reached; includes code DAILY_VOTE_LIMIT and the current VoteBudget fields
+          description: Active vote limit reached; includes code VOTE_LIMIT and the current VoteBudget fields
           content:
             application/json:
               schema:
@@ -248,16 +248,42 @@ paths:
     delete:
       security: [{BearerAuth: []}]
       summary: Remove your vote
-      description: Succeeds even if no vote exists. Removing never refunds the daily allowance.
+      description: Succeeds even if no vote exists. Removing a vote frees a slot.
       responses:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '503': {$ref: '#/components/responses/AuthUnavailable'}
         '200':
-          description: Vote removed, with unchanged daily allowance
+          description: Vote removed, with available slots
           content:
             application/json:
               schema: {$ref: '#/components/schemas/VoteResult'}
         '500': {$ref: '#/components/responses/ServerError'}
+  /issues/{id}/vote/swap:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    post:
+      security: [{BearerAuth: []}]
+      summary: Atomically replace an active vote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [removeIssueId, expectedIssueIds]
+              properties:
+                removeIssueId: {type: string}
+                expectedIssueIds: {type: array, minItems: 2, maxItems: 2, uniqueItems: true, items: {type: string}}
+      responses:
+        '200':
+          description: Updated vote allowance
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VoteBudget'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {description: Active votes changed since comparison}
+        '503': {$ref: '#/components/responses/AuthUnavailable'}
   /events/{id}/comments:
     parameters: [{$ref: '#/components/parameters/Id'}]
     get: &commentsGet
@@ -536,13 +562,11 @@ components:
         sample: {type: boolean}
     VoteBudget:
       type: object
-      required: [dailyLimit, votesUsed, votesRemaining, voteDate, resetsAt]
+      required: [limit, votesUsed, votesRemaining]
       properties:
-        dailyLimit: {type: integer, const: 2}
+        limit: {type: integer, const: 2}
         votesUsed: {type: integer, minimum: 0, maximum: 2}
         votesRemaining: {type: integer, minimum: 0, maximum: 2}
-        voteDate: {type: string, format: date, description: Vancouver calendar date}
-        resetsAt: {type: string, format: date-time}
     VoteResult:
       allOf:
         - {$ref: '#/components/schemas/VoteBudget'}

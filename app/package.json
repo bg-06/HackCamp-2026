@@ -12,6 +12,7 @@
     "ingest:static": "tsc && node dist/scripts/ingest.js refresh-static",
     "ingest:orgs": "tsc && node dist/scripts/ingest-orgs.js",
     "ingest:volunteer-events": "tsc && node dist/scripts/ingest-volunteer-events.js",
+    "geocode:events": "tsc && node dist/scripts/geocode-events.js",
     "ingest:status": "tsc && node dist/scripts/ingest.js status",
     "api": "tsc && node dist/server/index.js",
     "test": "tsc && node --test dist/tests/*.test.js",
