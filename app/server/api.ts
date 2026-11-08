@@ -453,7 +453,7 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
     requireScope(req, 'suggestions:post')
     const s = parseSuggestion(req.body)
     // The agent writes "<h3>:<type>", the app "<h3>|<type>"; H3 ids have no ':' so the first one is the separator.
-    const hotspotId = s.hotspotId.replace(':', '|')
+    const hotspotId = s.hotspotId
     const result = await sql.begin(async tx => {
       if (s.orgIds.length) {
         const known = await tx<{ id: string }[]>`SELECT id FROM orgs WHERE id IN ${tx(s.orgIds)}`

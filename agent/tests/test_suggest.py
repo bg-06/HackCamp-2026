@@ -159,7 +159,7 @@ def test_payload_contract_keys_and_values():
     assert set(d) == {"kind", "title", "category", "local_area", "latitude",
                       "longitude", "hotspot_id", "what_to_bring", "signup_url"}
     assert d["kind"] == "hotspot"
-    assert d["hotspot_id"] == f"{CELL_A}:{DUMP}"
+    assert d["hotspot_id"] == f"{CELL_A}|{DUMP}"
     assert d["signup_url"] is None
     lat, lng = h3.cell_to_latlng(CELL_A)
     assert (d["latitude"], d["longitude"]) == (lat, lng)

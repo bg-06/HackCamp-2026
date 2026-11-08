@@ -35,7 +35,7 @@ Suggestion, `POST {AGENT_API_BASE_URL}/agent/suggestions`. `AGENT_API_BASE_URL` 
 ```json
 {"kind":"suggestion","author":"block-steward-agent","local_area":"Mount Pleasant","org_ids":[],"title":"...","body":"...",
  "hotspot":{"h3_r9":"89...","request_type":"...","category":"...","times_reported":9,"months_seen":6,"last_reported":"2026-11-05T..."},
- "event_draft":{"kind":"hotspot","title":"...","category":"...","local_area":"...","latitude":49.26,"longitude":-123.1,"hotspot_id":"<h3_r9>:<request_type>","what_to_bring":"...","signup_url":null},
+ "event_draft":{"kind":"hotspot","title":"...","category":"...","local_area":"...","latitude":49.26,"longitude":-123.1,"hotspot_id":"<h3_r9>|<request_type>","what_to_bring":"...","signup_url":null},
  "city_program":{"name":"...","url":"..."},
  "dedupe_key":"suggestion:<h3_r9>:<request_type>:<YYYY-Www>"}
 ```

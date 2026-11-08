@@ -152,7 +152,7 @@ def _payload(h: dict, today: date, orgs, max_orgs) -> dict:
             "local_area": area,
             "latitude": lat,
             "longitude": lng,
-            "hotspot_id": f"{h['h3_r9']}:{h['request_type']}",
+            "hotspot_id": f"{h['h3_r9']}|{h['request_type']}",
             "what_to_bring": ("Gloves and a phone to report new tags in Van311"
                               if graffiti else "Gloves, grabbers and bags"),
             "signup_url": None,
