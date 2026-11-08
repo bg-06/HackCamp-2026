@@ -364,15 +364,17 @@ This is the prize we want most, so it gets the most care and the most visible de
 - First thing: run a network test notebook (`requests.get` against `opendata.vancouver.ca`). The trial limits external network access. (Done 2026-11-07: it works, so the fetch runs as a Databricks job task. If it ever fails, the same fetch script runs in the Maritime agent box, since it only needs to reach the City API and Postgres.) The AI step no longer needs outbound access because it uses Databricks-hosted models.
 - Create a secret scope `bbb` for anything sensitive.
 - Create one service principal (or a personal access token for the weekend) that n8n and the agent use to call the SQL and Jobs APIs. Store it as a secret in each of those, never in the repo. The app doesn't need it: it only talks to Postgres.
-- Connect **our existing Postgres** (database `blockbyblock`). It must be reachable from Databricks serverless over the internet with SSL: a hosted Postgres works, one on a laptop or in local Docker doesn't. If it has an IP allowlist, allow Databricks' outbound IPs (or open it with a strong password for the weekend).
-- Make three Postgres roles: `bbb_app` for the Next.js app (read/write app tables, read `gold_*`; stored in Vercel env vars), `bbb_ingest` for the 311 fetch and `publish_gold` (write `raw_311_requests` and `gold_*`; stored in the `bbb` secret scope as `pg_url`), and `bbb_reader` for Lakehouse Federation (read-only; password in the secret scope as `pg_reader_password`).
+- Connect **our existing Postgres**: database `hackcamp` on `db-hackcamp.noodlelab.ca:5433`, user `hackcamp`. The connection details live in the repo-root `env` file (gitignored; `env.example` is the committed template with the connection steps). It must be reachable from Databricks serverless over the internet. If it has an IP allowlist, allow Databricks' outbound IPs.
+- **Open issue (2026-11-07):** the server rejects SSL (`server does not support SSL`), so `sslmode=require` fails. Turn SSL on before Databricks connects over the internet; otherwise the password and data travel in plain text.
+- For the weekend everything uses the one `hackcamp` user. If there's time, split it into `bbb_app` (Next.js), `bbb_ingest` (311 fetch, `publish_gold`) and a read-only `bbb_reader` for Lakehouse Federation.
+- **Done in code:** `python databricks/setup/setup_postgres.py` reads `env`, stores `pg_host`, `pg_port`, `pg_db`, `pg_user`, `pg_password` and `pg_sslmode` in the `bbb` secret scope (sent on stdin, never printed), then runs `databricks/sql/setup.sql` on the SQL warehouse. That file creates the connection, the foreign catalog `bbb_app` and the `bbb.gold.track_overrides` table:
 - Register it in Unity Catalog as foreign catalog `bbb_app`, so the pipeline can read the raw 311 table and the app's tables:
 
 ```sql
 CREATE CONNECTION bbb_pg TYPE postgresql
-OPTIONS (host '<pg-host>', port '5432', user 'bbb_reader', password secret('bbb', 'pg_reader_password'));
+OPTIONS (host '<pg-host>', port '5433', user secret('bbb', 'pg_user'), password secret('bbb', 'pg_password'));
 
-CREATE FOREIGN CATALOG bbb_app USING CONNECTION bbb_pg OPTIONS (database 'blockbyblock');
+CREATE FOREIGN CATALOG bbb_app USING CONNECTION bbb_pg OPTIONS (database 'hackcamp');
 ```
 
 ### 5.2 Unity Catalog layout
@@ -417,23 +419,25 @@ catalog: bbb_app                 # our Postgres, as a Lakehouse Federation forei
 ```
 
 ```sql
--- Postgres, in app/db/migrations/
-CREATE TABLE raw_311_requests (
-  id bigserial PRIMARY KEY,
-  department text, service_request_type text, status text, closure_reason text,
+-- Postgres: app/db/migrations/001_ingest.sql (TypeScript ingest, docs/ingest.md). Columns Databricks reads:
+raw_311_requests (
+  ingest_id bigserial PRIMARY KEY,           -- tie-breaker for "latest version"
+  source_hash text NOT NULL,                 -- sha256 of the identity fields; Databricks uses it as case_key
+  department, service_request_type, status, closure_reason,
   service_request_open_timestamp timestamptz, service_request_close_date date,
-  last_modified_timestamp timestamptz, address text, local_area text, channel text,
+  last_modified_timestamp timestamptz, address, local_area, channel,
   latitude double precision, longitude double precision,
-  fetched_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX ON raw_311_requests (last_modified_timestamp);
+  ingested_at timestamptz,
+  -- also geom (PostGIS point) and source_record (jsonb): not read by Databricks
+  UNIQUE (source_hash, last_modified_timestamp)
+)
 ```
 
-The table is append-only: a case that changes shows up again with a newer `last_modified_timestamp`, and silver keeps the latest version. The newest `last_modified_timestamp` doubles as the fetch watermark, so there's no separate watermark table.
+The table is append-only: a case that changes shows up again with a newer `last_modified_timestamp`, and silver keeps the latest version. The ingest keeps its own cursor in `ingest_state` and also offers a `raw_311_current` view (latest per `source_hash`) for the app.
 
 ### 5.3 Ingestion task
 
-Python notebook (`databricks/notebooks/fetch_311.py`), first task in the job. Pulls only records modified since the newest one already in Postgres and appends them to `raw_311_requests`.
+**Owned by a teammate (getting data into Postgres).** Python notebook (`databricks/notebooks/fetch_311.py`), first task in the job once it exists; add it ahead of `pipeline_refresh` in `bbb_daily`. Pulls only records modified since the newest one already in Postgres and appends them to `raw_311_requests`.
 
 ```python
 %pip install "psycopg[binary]"
@@ -505,7 +509,7 @@ def t311_cases_current():
             .withColumn("rn", F.row_number().over(w)).filter("rn = 1").drop("rn"))
 ```
 
-**Already built vs this plan:** `databricks/pipelines/t311_pipeline.py` currently has the older version (Auto Loader from the volume, streaming tables, CDC). Switch it to the code above once the Postgres table is loaded. Gold views don't change.
+**Built (branch `databricks-postgres-pipeline`):** `databricks/pipelines/t311_pipeline.py` now uses the code above, adapted to the ingest's columns: `ingest_id` instead of `id`, and the ingest's `source_hash` as `case_key` (same identity fields), so Databricks and `raw_311_current` agree on what one case is. The source table is a pipeline setting (`bbb.raw_311_source`, default `bbb_app.public.raw_311_requests`). The tables already deployed are the old streaming tables, so the first run after deploying needs a full refresh (`databricks bundle run t311_pipeline --full-refresh-all`).
 
 If the pipeline can't read `bbb_app` directly, add a SQL task before `pipeline_refresh` that copies it into Delta (`CREATE OR REPLACE TABLE bbb.bronze.t311_raw AS SELECT * FROM bbb_app.public.raw_311_requests`) and start the pipeline at silver.
 
@@ -526,16 +530,20 @@ SELECT request_type,
          'Water and Sewer','Lighting and Signals','Parking','Animals','Other')) AS category,
        -- Which track: can neighbours help, or does only the City fix it?
        CASE ai_classify(request_type, ARRAY(
-              'litter, dumping, graffiti or leaves that volunteers can clean up',
-              'repair that only City crews can do',
-              'not a problem at a place'))
-         WHEN 'litter, dumping, graffiti or leaves that volunteers can clean up' THEN 'neighbours'
-         WHEN 'repair that only City crews can do' THEN 'city'
+              'litter or graffiti volunteers can clean up',   -- ai_classify labels: max 50 characters
+              'outdoor repair only City crews can do',
+              'not a physical problem at a place'))
+         WHEN 'litter or graffiti volunteers can clean up' THEN 'neighbours'
+         WHEN 'outdoor repair only City crews can do' THEN 'city'
          ELSE 'none' END AS ai_track
 FROM (SELECT DISTINCT request_type FROM bbb.silver.t311_cases_current);
 
 -- About 256 request types: check the AI's track by hand and fix mistakes in a small override table
 -- (bbb.gold.track_overrides: request_type, track). The Track 1 list should be short, roughly 20 to 30 types.
+-- Seeded in databricks/sql/setup.sql (checked 2026-11-07): the AI put 22 types in Track 1, and 11 are moved out
+-- (feces cleanup, mattresses, large items and litter cans -> city; private-property graffiti and program inquiries -> none).
+-- That leaves small dumping, recyclables, graffiti on City and park property, street debris, loose litter and sign cleaning.
+-- ai_classify can answer differently between runs, so the overrides also keep the track stable.
 CREATE OR REFRESH MATERIALIZED VIEW bbb.gold.cases_enriched AS
 SELECT c.*, t.category, coalesce(o.track, t.ai_track) AS track,
        datediff(c.closed_on, to_date(c.opened_at)) AS resolution_days
@@ -567,7 +575,7 @@ HAVING months_seen >= 4;
 
 `status` only takes `Open` and `Close` (checked), so the filters use `status = 'Open'`. `recurring_issues` also needs `h3_r9 IS NOT NULL`, or all the ungeocoded cases pile into one null cell.
 
-`databricks/sql/gold_views.sql` already has the first version of these views (without `track`). Add the track column, the override table and the views in 5.5.
+**Built:** `databricks/sql/gold_views.sql` has the track column, the override join, `help_hotspots` and `track2_issues`. `issue_priority` and `event_impact` read the app's `votes` and `events` tables, so they live in `databricks/sql/rankings.sql`. They run from the `refresh_rankings` notebook, which skips a statement until its Postgres table exists.
 
 ### 5.5 Gold views for the two tracks and event impact
 
@@ -681,7 +689,7 @@ FROM (
 Postgres sits on both sides of the pipeline:
 
 1. **In:** all input lands in Postgres. The 311 fetch appends City data to `raw_311_requests` (section 5.3), and the app writes residents' data (events, RSVPs, votes, comments). Because Postgres is registered in Unity Catalog as the foreign catalog `bbb_app` (section 5.1), the pipeline reads those tables directly (`SELECT * FROM bbb_app.public.raw_311_requests`, `bbb_app.public.votes`). There's no export job.
-2. **Out:** federation is read-only, so a `publish_gold` task (Python notebook `databricks/notebooks/publish_gold.py`) runs after the pipeline and copies the small gold tables the app needs into `gold_*` tables: `hotspots_h3`, `help_hotspots`, `track2_issues`, `event_impact`, `area_summaries`, `type_categories`. The `gold_*` tables are created by the app's migrations, so their columns and primary keys are under our control (for example `h3_r9, track, category` for hotspots and `issue_id` for Track 2 issues).
+2. **Out:** federation is read-only, so a `publish_gold` task (Python notebook `databricks/notebooks/publish_gold.py`) runs after the pipeline and copies the small gold tables the app needs into `gold_*` tables: `hotspots_h3`, `help_hotspots`, `track2_issues`, `event_impact`, `area_summaries`, `type_categories`. **Built:** the `gold_*` tables are defined in `databricks/postgres/gold_tables.sql`. `publish_gold` runs it (`CREATE TABLE IF NOT EXISTS`) before each publish, so the app's migrations don't need to create them; `issue_id` is the primary key of `gold_track2_issues`. It also keeps the old Postgres copy if Databricks returns 0 rows, and records each publish in `gold_published` (table, row count, time) so the app can show "updated at".
 
 ```python
 %pip install "psycopg[binary]"
@@ -733,6 +741,17 @@ refresh_rankings  (issue_priority + event_impact, then publish_gold; triggered b
 ```
 
 Store the job and pipeline in a Databricks Asset Bundle (`databricks.yml`) in the repo so judges can see it's reproducible.
+
+**Built:** `databricks/databricks.yml` defines `bbb_daily` (`pipeline_refresh` → `refresh_rankings` → `area_summaries` → `publish_gold`, 06:00 Vancouver, paused until the first good manual run) and `bbb_refresh_rankings` (`refresh_rankings` → `publish_gold`) for n8n. The summary model is the bundle variable `summary_endpoint` (default `databricks-meta-llama-3-3-70b-instruct`).
+
+Order to bring it up:
+
+1. Teammate loads `raw_311_requests` into Postgres
+2. Turn on SSL on the Postgres server
+3. `python databricks/setup/setup_postgres.py`, then check `SHOW TABLES IN bbb_app.public`
+4. `cd databricks && databricks bundle deploy`
+5. `databricks bundle run t311_pipeline --full-refresh-all` (once, to replace the old streaming tables)
+6. `databricks bundle run bbb_daily`, check the `gold_*` tables in Postgres, then unpause the schedule
 
 ### 5.9 Demo surface for the Databricks judges
 
