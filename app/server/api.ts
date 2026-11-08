@@ -5,7 +5,7 @@ import express, { type NextFunction, type Request, type Response, type RequestHa
 import { cellToLatLng, isValidCell, latLngToCell, getResolution } from 'h3-js'
 import type { Sql, TransactionSql } from 'postgres'
 import { parseNewEvent, ApiError, pageLimit, parseDisplayName, parseSuggestion, parseBriefing } from './validation.js'
-import { requireScope, userId, viewerId } from './auth.js'
+import { requirePermission, requireScope, userId, viewerId } from './auth.js'
 
 function centre(h3: string | null): { lat?: number; lng?: number } {
   if (!h3 || !isValidCell(h3)) return {}
@@ -94,7 +94,7 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
   type IssueRow = {
     issue_id: string; h3_r9: string; request_type: string; category: string | null; local_area: string | null
     address: string | null; open_cases: number; days_open: number; times_reported_12m: number; base_score: number
-    up_votes: number; down_votes: number; my_vote: number; score: number; comment_count: number
+    up_votes: number; down_votes: number; my_vote: number; score: number; comment_count: number; recent_activity: number
   }
 
   // up_votes / down_votes leave out the caller's own vote; that is my_vote (see types.ts).
@@ -106,6 +106,8 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
              0::int AS down_votes,
              coalesce(max(v.value) FILTER (WHERE v.user_id = ${user} AND v.value = 1), 0)::int AS my_vote,
              coalesce(i.base_score, 0)::float8 + 3 * count(*) FILTER (WHERE v.value = 1) AS score,
+             (count(*) FILTER (WHERE v.value = 1 AND v.created_at >= now() - interval '7 days') +
+              (SELECT count(*) FROM comments c WHERE c.issue_id = i.issue_id AND NOT c.hidden AND c.created_at >= now() - interval '7 days'))::int AS recent_activity,
              (SELECT count(*)::int FROM comments c WHERE c.issue_id = i.issue_id AND NOT c.hidden) AS comment_count
       FROM gold_track2_issues i
       LEFT JOIN votes v ON v.issue_id = i.issue_id
@@ -132,6 +134,7 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
       my_vote: r.my_vote,
       score: r.score,
       comment_count: r.comment_count,
+      recent_activity: r.recent_activity,
       ...centre(r.h3_r9),
     }
   }
@@ -158,24 +161,17 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
   app.use(authentication)
   app.use(express.json())
 
-  type BudgetRow = { vote_day: string; votes_used: number; resets_at: Date }
   async function voteBudget(user: string, db: Sql | TransactionSql = sql) {
-    const [row] = await db<BudgetRow[]>`
-      SELECT (current_timestamp AT TIME ZONE 'America/Vancouver')::date::text AS vote_day,
-             coalesce((SELECT votes_used FROM vote_daily_usage WHERE user_id = ${user}
-               AND vote_day = (current_timestamp AT TIME ZONE 'America/Vancouver')::date), 0)::int AS votes_used,
-             (((current_timestamp AT TIME ZONE 'America/Vancouver')::date + 1)::timestamp
-               AT TIME ZONE 'America/Vancouver') AS resets_at`
-    return { dailyLimit: 2, votesUsed: row!.votes_used, votesRemaining: Math.max(0, 2 - row!.votes_used),
-             voteDate: row!.vote_day, resetsAt: row!.resets_at.toISOString() }
+    const [row] = await db<{ votes_used: number }[]>`SELECT count(*)::int AS votes_used FROM votes v JOIN gold_track2_issues i ON i.issue_id = v.issue_id WHERE v.user_id = ${user} AND v.value = 1`
+    return { limit: 2, votesUsed: row!.votes_used, votesRemaining: Math.max(0, 2 - row!.votes_used) }
   }
 
   async function lockVoteDay(user: string, tx: TransactionSql) {
     await tx`INSERT INTO vote_daily_usage (user_id, vote_day, votes_used)
-             VALUES (${user}, (current_timestamp AT TIME ZONE 'America/Vancouver')::date, 0)
+             VALUES (${user}, '1970-01-01', 0)
              ON CONFLICT (user_id, vote_day) DO NOTHING`
     await tx`SELECT votes_used FROM vote_daily_usage WHERE user_id = ${user}
-             AND vote_day = (current_timestamp AT TIME ZONE 'America/Vancouver')::date FOR UPDATE`
+             AND vote_day = '1970-01-01' FOR UPDATE`
   }
 
   // The name shown on your comments and the events you host. The frontend sets it from your Auth0
@@ -234,14 +230,27 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
       lat = input.lat!; lng = input.lng!; h3 = latLngToCell(lat, lng, 9)
     }
     const id = await sql.begin(async tx => {
+      let org: { id: string; name: string } | undefined
+      if (input.suggestionId) {
+        if (!/^\d+$/.test(input.suggestionId) || !hotspotId) throw new ApiError(400, 'invalid suggestion')
+        const [suggestion] = await tx<{ id: string; hotspot_id: string; org_id: string; name: string }[]>`
+          SELECT p.id, p.hotspot_id, p.org_id, o.name FROM posts p
+          JOIN orgs o ON o.id = p.org_id JOIN org_members m ON m.org_id = o.id
+          WHERE p.id = ${input.suggestionId} AND p.kind = 'suggestion' AND p.status = 'pending'
+            AND m.user_id = ${user} AND m.role = 'admin' AND m.approved FOR UPDATE OF p`
+        if (!suggestion) throw new ApiError(404, 'pending suggestion not found')
+        if (suggestion.hotspot_id !== hotspotId) throw new ApiError(409, 'suggestion hotspot has changed')
+        org = { id: suggestion.org_id, name: suggestion.name }
+      }
       const [event] = await tx<{ id: string }[]>`INSERT INTO events
-        (kind, title, organiser, category, starts_at, ends_at, location, local_area, spots_total,
+        (kind, title, organiser, org_id, category, starts_at, ends_at, location, local_area, spots_total,
          what_to_bring, latitude, longitude, h3_r9, hotspot_id, created_by, is_sample)
-        VALUES ('hotspot', ${input.title},
-                coalesce((SELECT display_name FROM profiles WHERE user_id = ${user}), 'A neighbour'), ${category}, ${input.startsAt}, ${input.endsAt},
+        VALUES (${org ? 'org' : 'hotspot'}, ${input.title},
+                ${org?.name ?? null}, ${org?.id ?? null}, ${category}, ${input.startsAt}, ${input.endsAt},
                 ${input.location}, ${localArea}, ${input.spotsTotal}, ${input.whatToBring ?? null},
                 ${lat}, ${lng}, ${h3}, ${hotspotId}, ${user}, false) RETURNING id`
       await tx`INSERT INTO rsvps (event_id, user_id) VALUES (${event!.id}, ${user})`
+      if (input.suggestionId) await tx`UPDATE posts SET status = 'accepted' WHERE id = ${input.suggestionId}`
       return event!.id
     })
     const [row] = await eventQuery(user, sql`e.id = ${id}`)
@@ -394,14 +403,11 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
       await lockVoteDay(user, tx)
       const [existing] = await tx`SELECT value FROM votes WHERE issue_id = ${req.params.id} AND user_id = ${user}`
       if (existing?.value === 1) return voteBudget(user, tx)
-      const updated = await tx`UPDATE vote_daily_usage SET votes_used = votes_used + 1
-        WHERE user_id = ${user} AND vote_day = (current_timestamp AT TIME ZONE 'America/Vancouver')::date
-          AND votes_used < 2 RETURNING votes_used`
-      if (!updated.length) throw new ApiError(429, 'Daily vote limit reached',
-        { code: 'DAILY_VOTE_LIMIT', ...await voteBudget(user, tx) })
+      const current = await voteBudget(user, tx)
+      if (!current.votesRemaining) throw new ApiError(429, 'Active vote limit reached',
+        { code: 'VOTE_LIMIT', ...current })
       await tx`INSERT INTO votes (issue_id, user_id, value, created_at) VALUES (${req.params.id}, ${user}, 1, now())
         ON CONFLICT (issue_id, user_id) DO UPDATE SET value = 1, created_at = EXCLUDED.created_at`
-      await tx`INSERT INTO vote_casts (user_id, issue_id) VALUES (${user}, ${req.params.id})`
       return voteBudget(user, tx)
     })
     res.json({ ...budget, myVote: 1 })
@@ -415,6 +421,27 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
       return voteBudget(user, tx)
     })
     res.json({ ...budget, myVote: 0 })
+  })
+
+  app.post('/issues/:id/vote/swap', async (req, res) => {
+    const user = userId(req)
+    const removeId = req.body?.removeIssueId
+    const expected = req.body?.expectedIssueIds
+    if (typeof removeId !== 'string' || !Array.isArray(expected) || expected.length !== 2 || !expected.every((x: unknown) => typeof x === 'string') || new Set(expected).size !== 2 || !expected.includes(removeId) || removeId === req.params.id)
+      throw new ApiError(400, 'Invalid vote selection')
+    const budget = await sql.begin(async tx => {
+      await lockVoteDay(user, tx)
+      const active = await tx<{ issue_id: string }[]>`SELECT v.issue_id FROM votes v JOIN gold_track2_issues i ON i.issue_id = v.issue_id WHERE v.user_id = ${user} AND v.value = 1`
+      if (active.length !== 2 || active.some(v => !expected.includes(v.issue_id)) || active.some(v => v.issue_id === req.params.id))
+        throw new ApiError(409, 'Your votes changed. Refresh and try again.')
+      const found = await tx`SELECT 1 FROM gold_track2_issues WHERE issue_id = ${req.params.id}`
+      if (!found.length) throw new ApiError(404, 'Issue not found')
+      await tx`DELETE FROM votes WHERE issue_id = ${removeId} AND user_id = ${user} AND value = 1`
+      await tx`INSERT INTO votes (issue_id, user_id, value, created_at) VALUES (${req.params.id}, ${user}, 1, now())
+        ON CONFLICT (issue_id, user_id) DO UPDATE SET value = 1, created_at = EXCLUDED.created_at`
+      return voteBudget(user, tx)
+    })
+    res.json(budget)
   })
 
   // Comments, oldest first. Issue comments need migration 004_issue_comments.sql.
@@ -446,13 +473,48 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
   }
 
   // ---------- Block Steward agent (Auth0 machine tokens, agent/README.md) ----------
+  // Membership is granted by a moderator after an out-of-band identity check.
+  app.get('/me/organizations', async (req, res) => {
+    const rows = await sql`SELECT o.id, o.name, o.local_area FROM orgs o JOIN org_members m ON m.org_id = o.id
+      WHERE m.user_id = ${userId(req)} AND m.role = 'admin' AND m.approved ORDER BY o.name`
+    res.json(rows)
+  })
+
+  app.put('/moderation/organizations/:orgId/members/:memberId', async (req, res) => {
+    requirePermission(req, 'moderate:organizations')
+    if (typeof req.body?.approved !== 'boolean') throw new ApiError(400, 'approved must be a boolean')
+    const [org] = await sql`SELECT id FROM orgs WHERE id = ${req.params.orgId}`
+    if (!org) throw new ApiError(404, 'organization not found')
+    await sql`INSERT INTO org_members (org_id, user_id, role, approved)
+      VALUES (${req.params.orgId}, ${req.params.memberId}, 'admin', ${req.body.approved})
+      ON CONFLICT (org_id, user_id) DO UPDATE SET role = 'admin', approved = EXCLUDED.approved`
+    res.json({ approved: req.body.approved })
+  })
+
+  app.get('/me/suggestions', async (req, res) => {
+    const rows = await sql`SELECT p.id::text, p.org_id, o.name AS org_name, p.title, p.body, p.payload, p.created_at
+      FROM posts p JOIN orgs o ON o.id = p.org_id JOIN org_members m ON m.org_id = o.id
+      WHERE m.user_id = ${userId(req)} AND m.role = 'admin' AND m.approved
+        AND p.kind = 'suggestion' AND p.status = 'pending' ORDER BY p.created_at DESC, p.id DESC LIMIT 100`
+    res.json(rows)
+  })
+
+  app.post('/me/suggestions/:id/dismiss', async (req, res) => {
+    if (!/^\d+$/.test(req.params.id)) throw new ApiError(404, 'pending suggestion not found')
+    const [row] = await sql`UPDATE posts p SET status = 'dismissed'
+      WHERE p.id = ${req.params.id} AND p.kind = 'suggestion' AND p.status = 'pending'
+        AND EXISTS (SELECT 1 FROM org_members m WHERE m.org_id = p.org_id AND m.user_id = ${userId(req)}
+          AND m.role = 'admin' AND m.approved) RETURNING p.id`
+    if (!row) throw new ApiError(404, 'pending suggestion not found')
+    res.json({ dismissed: true })
+  })
   // Suggestions are stored 'pending' for org admins to accept or dismiss; briefings are published.
   // A repeat is answered 200 with stored: 0, so the agent doesn't count it as a failed send.
 
   app.post('/agent/suggestions', async (req, res) => {
     requireScope(req, 'suggestions:post')
     const s = parseSuggestion(req.body)
-    // The agent writes "<h3>:<type>", the app "<h3>|<type>"; H3 ids have no ':' so the first one is the separator.
+    // Normalize legacy agent hotspot IDs before lookup.
     const hotspotId = s.hotspotId.replace(':', '|')
     const result = await sql.begin(async tx => {
       if (s.orgIds.length) {

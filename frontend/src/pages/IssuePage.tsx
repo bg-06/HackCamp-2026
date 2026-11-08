@@ -8,6 +8,7 @@ import VoteControl from "../components/VoteControl";
 import VotesLeft from "../components/VotesLeft";
 import { categoryStyle } from "../data/categories";
 import { VAN311_URL } from "../lib/issues";
+import { issueImage } from "../lib/issueImage";
 import { useFeed } from "../state/feed";
 import type { Track2Issue, Vote } from "../types";
 
@@ -48,7 +49,7 @@ export default function IssuePage() {
       const n = ++lastTap.current;
       const before = fetched?.my_vote ?? 0;
       setFetched((i) => (i ? { ...i, my_vote: value } : i));
-      setMyVote(issueId, value).then((ok) => !ok && lastTap.current === n && setFetched((i) => (i ? { ...i, my_vote: before } : i)));
+      setMyVote(issueId, value, issue ?? undefined).then((ok) => !ok && lastTap.current === n && setFetched((i) => (i ? { ...i, my_vote: before } : i)));
     });
   }
 
@@ -97,7 +98,7 @@ export default function IssuePage() {
         {issue && (
           <>
             <article className="detail">
-              <img className="detail-photo" src={issue.photo_url || '/issue-placeholder.png'} alt="" />
+              <img className="detail-photo" src={issue.photo_url || issueImage(issue.category)} alt="" />
               {!issue.photo_url && <p className="muted small">Illustrative image · not a photo of this issue</p>}
               <p className="eyebrow">{categoryStyle(issue.category).label} · Only the City can fix this</p>
               <h1>{issue.request_type.replace(/ Case$/, "")}</h1>

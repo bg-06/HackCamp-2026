@@ -1,9 +1,11 @@
 import { ChevronLeft, TriangleAlert } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { createEvent } from "../api/client";
-import { requestTypeInSentence } from "../lib/cover";
+import { createEvent, getSuggestions, type Suggestion } from "../api/client";
+import { describeReports, hotspotKind } from "../lib/hotspots";
+import { VAN311_URL } from "../lib/issues";
 import { useFeed } from "../state/feed";
+import { useAuth } from "../state/auth";
 import type { HelpHotspot, NewEvent } from "../types";
 
 const TZ = "America/Vancouver";
@@ -24,21 +26,37 @@ function nextSaturday() {
 
 function defaultTitle(h: HelpHotspot) {
   const where = h.near ?? h.local_area;
-  return h.category === "Graffiti" ? `Graffiti paint-out near ${where}` : `Cleanup near ${where}`;
+  // Volunteers can't paint over graffiti on City or park property: walk, log each tag, report it.
+  return hotspotKind(h.request_type, h.category).action === "walk" ? `Graffiti walk near ${where}` : `Cleanup near ${where}`;
 }
 
 export default function NewEventPage() {
   const [params] = useSearchParams();
   const hotspotId = params.get("hotspot") ?? "";
+  const suggestionId = params.get("suggestion") ?? "";
+  const { ready, signedIn } = useAuth();
+  const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
+  const [suggestionLoaded, setSuggestionLoaded] = useState(!suggestionId);
+  useEffect(() => {
+    if (!suggestionId || !ready || !signedIn) return;
+    let active = true;
+    getSuggestions().then(items => { if (active) setSuggestion(items.find(s => s.id === suggestionId) ?? null); })
+      .catch(() => { if (active) setSuggestion(null); }).finally(() => { if (active) setSuggestionLoaded(true); });
+    return () => { active = false; };
+  }, [suggestionId, ready, signedIn]);
   const { hotspots } = useFeed();
-  const hotspot = hotspots.items?.find((h) => h.id === hotspotId);
+  const draftHotspot = suggestion?.payload.event_draft.hotspot_id.replace(/^([^:|]+):/, "$1|");
+  const hotspot = hotspots.items?.find((h) => h.id === (suggestionId ? draftHotspot : hotspotId));
 
   return (
     <div className="page">
       <Header />
       <main className="page-content">
         {!hotspots.items && !hotspots.error && <div className="skeleton" style={{ height: 320 }} aria-busy="true" />}
-        {(hotspots.error || (hotspots.items && !hotspot)) && (
+        {suggestionId && !ready && <p className="muted" role="status">Checking sign-in…</p>}
+        {suggestionId && ready && !signedIn && <p className="form-error" role="alert">Sign in with an approved organization account to plan this suggestion.</p>}
+        {suggestionId && suggestionLoaded && !suggestion && <p className="form-error">This suggestion is unavailable. Sign in with an approved organization account and try again.</p>}
+        {suggestionLoaded && (!suggestionId || suggestion) && (hotspots.error || (hotspots.items && !hotspot)) && (
           <div className="empty">
             <p>Pick a spot from "Needs help" to start an event there.</p>
             <Link className="chip-button" to="/">
@@ -46,8 +64,19 @@ export default function NewEventPage() {
             </Link>
           </div>
         )}
+        {/* Dumped items need a City pickup (and may be someone's belongings), so no cleanup event. */}
+        {hotspot && hotspotKind(hotspot.request_type, hotspot.category).action === "report" && (
+          <div className="empty">
+            <p>Dumped items here need a City pickup, and some things left out may belong to someone. Report it instead of planning a cleanup.</p>
+            <a className="chip-button" href={VAN311_URL} target="_blank" rel="noopener noreferrer">
+              Report in Van311 ↗
+            </a>
+          </div>
+        )}
         {/* keyed so the form starts fresh if the spot changes */}
-        {hotspot && <EventForm key={hotspot.id} hotspot={hotspot} />}
+        {hotspot && suggestionLoaded && (!suggestionId || suggestion) && hotspotKind(hotspot.request_type, hotspot.category).action !== "report" && (
+          <EventForm key={hotspot.id + suggestionId} hotspot={hotspot} suggestion={suggestion} />
+        )}
       </main>
     </div>
   );
@@ -69,18 +98,19 @@ function Header() {
   );
 }
 
-function EventForm({ hotspot }: { hotspot: HelpHotspot }) {
+function EventForm({ hotspot, suggestion }: { hotspot: HelpHotspot; suggestion: Suggestion | null }) {
   const navigate = useNavigate();
   const { addEvent, requireSignIn } = useFeed();
 
-  const [title, setTitle] = useState(() => defaultTitle(hotspot));
+  const walk = hotspotKind(hotspot.request_type, hotspot.category).action === "walk";
+  const [title, setTitle] = useState(() => walk ? defaultTitle(hotspot) : suggestion?.payload.event_draft.title ?? defaultTitle(hotspot));
   const [today] = useState(() => vancouverDate(new Date()));
   const [date, setDate] = useState(nextSaturday);
   const [start, setStart] = useState("10:00");
   const [end, setEnd] = useState("12:00");
   const [location, setLocation] = useState(hotspot.near ?? hotspot.local_area);
   const [spots, setSpots] = useState("10");
-  const [bring, setBring] = useState("Work gloves");
+  const [bring, setBring] = useState(walk ? "A phone to photograph and report each tag" : suggestion?.payload.event_draft.what_to_bring ?? "Work gloves");
   const [problem, setProblem] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -111,6 +141,7 @@ function EventForm({ hotspot }: { hotspot: HelpHotspot }) {
 
     const input: NewEvent = {
       hotspotId: hotspot.id,
+      suggestionId: suggestion?.id,
       title: title.trim(),
       startsAt,
       endsAt,
@@ -129,8 +160,7 @@ function EventForm({ hotspot }: { hotspot: HelpHotspot }) {
   return (
     <form className="event-form" onSubmit={submit}>
       <p className="why-here">
-        {requestTypeInSentence(hotspot.request_type)} has been reported here {hotspot.times_reported} times in the last {hotspot.months_seen}{" "}
-        months.
+        {hotspotKind(hotspot.request_type, hotspot.category).label} here: {describeReports(hotspot.times_reported, Math.min(12, hotspot.months_seen))}.
       </p>
 
       <label>
@@ -164,12 +194,22 @@ function EventForm({ hotspot }: { hotspot: HelpHotspot }) {
         <input value={bring} onChange={(e) => setBring(e.target.value)} maxLength={120} />
       </label>
 
-      <p className="muted small">
-        The City lends gloves, bags and grabbers for neighbourhood cleanups.{" "}
-        <a className="text-link" href={CLEANUP_SUPPLIES_URL} target="_blank" rel="noopener noreferrer">
-          Request supplies ↗
-        </a>
-      </p>
+      {walk ? (
+        <p className="muted small">
+          Walk the block together, photograph each tag and report it in Van311. Please don't paint over City or park
+          property; City crews remove it.{" "}
+          <a className="text-link" href={VAN311_URL} target="_blank" rel="noopener noreferrer">
+            Van311 ↗
+          </a>
+        </p>
+      ) : (
+        <p className="muted small">
+          The City lends gloves, bags and grabbers for neighbourhood cleanups. Leave anything that might belong to someone.{" "}
+          <a className="text-link" href={CLEANUP_SUPPLIES_URL} target="_blank" rel="noopener noreferrer">
+            Request supplies ↗
+          </a>
+        </p>
+      )}
 
       {problem && (
         <p className="form-error" role="alert">

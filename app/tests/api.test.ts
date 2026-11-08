@@ -160,18 +160,18 @@ test('future events cannot be completed and do not generate volunteer hours', as
   assert.deepEqual((await request('/me/history')).body, [])
 })
 
-test('upvotes enforce two casts per day, retain spent allowance after removal, and make repeats idempotent', async () => {
+test('upvotes enforce two active votes, refund removal, and make repeats idempotent', async () => {
   assert.equal((await request('/me/votes')).body.votesRemaining, 2)
   assert.equal((await request('/issues/issue-1/vote', 'PUT', { value: -1 })).status, 400)
   assert.equal((await request('/issues/issue-1/vote', 'PUT', { value: 1 })).body.votesRemaining, 1)
   assert.equal((await request('/issues/issue-1/vote', 'PUT', { value: 1 })).body.votesRemaining, 1)
-  assert.equal((await request('/issues/issue-1/vote', 'DELETE')).body.votesRemaining, 1)
-  assert.equal((await request('/issues/issue-1/vote', 'PUT', { value: 1 })).body.votesRemaining, 0)
-  const denied = await request('/issues/issue-2/vote', 'PUT', { value: 1 })
+  assert.equal((await request('/issues/issue-1/vote', 'DELETE')).body.votesRemaining, 2)
+  assert.equal((await request('/issues/issue-1/vote', 'PUT', { value: 1 })).body.votesRemaining, 1)
+  assert.equal((await request('/issues/issue-2/vote', 'PUT', { value: 1 })).body.votesRemaining, 0)
+  const denied = await request('/issues/issue-3/vote', 'PUT', { value: 1 })
   assert.equal(denied.status, 429)
-  assert.equal(denied.body.code, 'DAILY_VOTE_LIMIT')
+  assert.equal(denied.body.code, 'VOTE_LIMIT')
   assert.equal(denied.body.votesRemaining, 0)
-  assert.equal((await sql`SELECT count(*)::int AS n FROM vote_casts`)[0]!.n, 2)
   assert.equal((await request('/me/votes', 'GET', undefined, 'bob')).body.votesRemaining, 2)
 })
 
@@ -184,7 +184,7 @@ test('parallel attempts cannot exceed the daily allowance', async () => {
 test('parallel repeats of the same vote spend only one allowance', async () => {
   const responses = await Promise.all([1, 2].map(() => request('/issues/issue-1/vote', 'PUT', { value: 1 })))
   assert.ok(responses.every(r => r.status === 200 && r.body.votesRemaining === 1))
-  assert.equal((await sql`SELECT count(*)::int AS n FROM vote_casts`)[0]!.n, 1)
+  assert.equal((await sql`SELECT count(*)::int AS n FROM votes WHERE user_id = 'alice' AND value = 1`)[0]!.n, 1)
 })
 
 test('event capacity remains bounded under parallel RSVPs', async () => {
@@ -222,8 +222,18 @@ test('budget migration backfills existing upvotes and remains safe to replay wit
   assert.equal((await request('/me/votes', 'GET', undefined, 'bob')).body.votesRemaining, 2)
   await request('/issues/issue-1/vote', 'DELETE')
   await sql.unsafe(migration)
-  assert.equal((await request('/me/votes')).body.votesRemaining, 0)
+  assert.equal((await request('/me/votes')).body.votesRemaining, 1)
   assert.equal((await sql`SELECT count(*)::int AS n FROM vote_casts`)[0]!.n, 2)
+})
+
+test('swap atomically replaces a vote and rejects stale selections', async () => {
+  await request('/issues/issue-1/vote', 'PUT', { value: 1 })
+  await request('/issues/issue-2/vote', 'PUT', { value: 1 })
+  const body = { removeIssueId: 'issue-1', expectedIssueIds: ['issue-1', 'issue-2'] }
+  assert.equal((await request('/issues/issue-3/vote/swap', 'POST', body)).status, 200)
+  assert.equal((await request('/issues/issue-3/vote/swap', 'POST', body)).status, 409)
+  const votes = await sql`SELECT issue_id FROM votes WHERE user_id = 'alice' AND value = 1 ORDER BY issue_id`
+  assert.deepEqual(votes.map(v => v.issue_id), ['issue-2', 'issue-3'])
 })
 
 test('comments and hosted events show display names, never Auth0 ids', async () => {
@@ -297,6 +307,43 @@ test('agent suggestions need the suggestions scope and are stored pending, once 
   assert.deepEqual(await agentPost('/agent/suggestions', suggestion({ org_ids: ['org-b'], dedupe_key: week46 })), { status: 201, body: { stored: 1, skipped: 0 } })
   // no orgs: one area-wide row
   assert.deepEqual(await agentPost('/agent/suggestions', suggestion()), { status: 201, body: { stored: 1, skipped: 0 } })
+})
+
+test('only an approved org admin can dismiss or publish a suggestion', async () => {
+  await sql`INSERT INTO orgs (id, name, local_area) VALUES ('org-a', 'Garden A', 'Mount Pleasant')`
+  await sql`INSERT INTO org_members (org_id, user_id, role, approved) VALUES ('org-a', 'alice', 'admin', true), ('org-a', 'bob', 'admin', false)`
+  await agentPost('/agent/suggestions', suggestion({ org_ids: ['org-a'] }))
+  const [post] = await sql`SELECT id::text FROM posts WHERE kind = 'suggestion'`
+  assert.equal((await request('/me/suggestions', 'GET', undefined, 'bob')).body.length, 0)
+  assert.equal((await request(`/me/suggestions/${post!.id}/dismiss`, 'POST', {}, 'bob')).status, 404)
+  assert.equal((await request('/events', 'POST', { ...eventInput(), suggestionId: post!.id }, 'bob')).status, 404)
+  assert.equal((await request('/me/suggestions')).body.length, 1)
+  const created = await request('/events', 'POST', { ...eventInput(), suggestionId: post!.id })
+  assert.equal(created.status, 201)
+  assert.equal(created.body.organiser, 'Garden A')
+  assert.equal(created.body.kind, 'org')
+  assert.equal((await sql`SELECT status FROM posts WHERE id = ${post!.id}`)[0]!.status, 'accepted')
+  assert.equal((await request('/events', 'POST', { ...eventInput(), suggestionId: post!.id })).status, 404)
+})
+
+test('an approved org admin can dismiss a pending suggestion only once', async () => {
+  await sql`INSERT INTO orgs (id, name) VALUES ('org-a', 'Garden A')`
+  await sql`INSERT INTO org_members (org_id, user_id, role, approved) VALUES ('org-a', 'alice', 'admin', true)`
+  await agentPost('/agent/suggestions', suggestion({ org_ids: ['org-a'] }))
+  const [post] = await sql`SELECT id::text FROM posts WHERE kind = 'suggestion'`
+  assert.equal((await request(`/me/suggestions/${post!.id}/dismiss`, 'POST')).status, 200)
+  assert.equal((await request(`/me/suggestions/${post!.id}/dismiss`, 'POST')).status, 404)
+  assert.equal((await request('/me/suggestions')).body.length, 0)
+})
+
+test('membership changes require the Auth0 moderator permission', async () => {
+  await sql`INSERT INTO orgs (id, name) VALUES ('org-a', 'Garden A')`
+  const path = '/moderation/organizations/org-a/members/alice'
+  assert.equal((await request(path, 'PUT', { approved: true })).status, 403)
+  const token = await identity.sign('moderator', { permissions: ['moderate:organizations'] })
+  const response = await fetch(base + path, { method: 'PUT', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify({ approved: true }) })
+  assert.equal(response.status, 200)
+  assert.equal((await request('/me/organizations')).body[0].id, 'org-a')
 })
 
 test('agent briefings are published once per dedupe key and listed publicly as plain data', async () => {

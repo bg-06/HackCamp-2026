@@ -44,7 +44,7 @@ export function parseNewEvent(input: unknown, now = new Date()) {
   return {
     title: text(b.title, 'title', 120)!, location: text(b.location, 'location', 120)!,
     startsAt, endsAt, spotsTotal: b.spotsTotal,
-    hotspotId, whatToBring: b.whatToBring === '' ? undefined : text(b.whatToBring, 'whatToBring', 1000, true),
+    hotspotId, suggestionId: text(b.suggestionId, 'suggestionId', 30, true), whatToBring: b.whatToBring === '' ? undefined : text(b.whatToBring, 'whatToBring', 1000, true),
     category: hotspotId ? undefined : text(b.category, 'category', 100),
     localArea: hotspotId ? undefined : text(b.localArea, 'localArea', 100),
     lat: b.lat as number | undefined, lng: b.lng as number | undefined,

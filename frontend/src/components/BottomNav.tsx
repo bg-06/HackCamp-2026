@@ -10,7 +10,7 @@ const ITEMS = [
 export default function BottomNav() {
   const { pathname } = useLocation()
   // Detail pages count as their tab. Plain Link, because NavLink would set its own aria-current.
-  const isActive = (to: string) => (to === '/' ? pathname === '/' || pathname.startsWith('/volunteer/') : pathname.startsWith(to))
+  const isActive = (to: string) => (to === '/' ? pathname === '/' || pathname.startsWith('/volunteer/') : to === '/me' ? pathname === '/settings' || pathname === '/community-updates' || pathname.startsWith(to) : pathname.startsWith(to))
 
   return (
     <nav className="bottom-nav" aria-label="Main">

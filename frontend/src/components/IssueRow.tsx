@@ -2,6 +2,7 @@ import { MessageCircle } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { categoryStyle } from '../data/categories'
 import { formatKm } from '../lib/geo'
+import { issueImage } from '../lib/issueImage'
 import type { Track2Issue, Vote } from '../types'
 import VoteControl from './VoteControl'
 
@@ -24,7 +25,7 @@ export default function IssueRow({ issue, rank, distanceKm, onVote }: Props) {
         <span className="issue-rank">{rank}</span>
         {/* Same size with or without a photo, so the rows line up */}
         <div className="issue-thumb">
-          <img src={issue.photo_url || '/issue-placeholder.png'} alt="" loading="lazy" />
+          <img src={issue.photo_url || issueImage(issue.category)} alt="" loading="lazy" />
         </div>
         <div className="issue-row-text">
           <p className="eyebrow">{style.label}</p>

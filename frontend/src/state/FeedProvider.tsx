@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ApiError, getHelpHotspots, getTrack2Issues, getVolunteerEvents, getVoteBudget, setGoing as saveGoing, setVote, USE_MOCK } from "../api/client";
+import { ApiError, getHelpHotspots, getTrack2Issues, getVolunteerEvents, getVoteBudget, setGoing as saveGoing, setVote, swapVote, USE_MOCK } from "../api/client";
+import VoteComparison from "../components/VoteComparison";
 import { useAuth } from "./auth";
 import { inVancouver } from "../lib/geo";
-import { vancouverToday } from "../lib/issues";
 import type { CommentTarget, FeedTab, HelpHotspot, LatLng, SortKey, Track2Issue, VolunteerEvent, Vote, VoteBudget } from "../types";
 import { FeedContext, type Loaded, type LocateStatus } from "./feed";
 
@@ -25,6 +25,8 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
   const [reloadKey, setReloadKey] = useState(0);
   const [voteBudget, setVoteBudget] = useState<VoteBudget | null>(null);
   const [voteLimitHit, setVoteLimitHit] = useState(false);
+  const [comparison, setComparison] = useState<[Track2Issue, Track2Issue, Track2Issue] | null>(null);
+  const closeComparison = useCallback(() => setComparison(null), []);
 
   // Numbers each budget request. Only the latest one may set the budget, so a slow response
   // from an earlier vote can't put back a count that's already out of date.
@@ -82,23 +84,6 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
     };
   }, [reloadKey, authKey, refreshBudget]);
 
-  // A new Vancouver day brings new votes. Check every minute and whenever the tab comes back.
-  const voteDate = voteBudget?.voteDate;
-  useEffect(() => {
-    if (!voteDate) return;
-    const check = () => {
-      if (document.visibilityState !== "visible" || vancouverToday() === voteDate) return;
-      setVoteLimitHit(false);
-      refreshBudget();
-    };
-    const timer = setInterval(check, 60 * 1000);
-    document.addEventListener("visibilitychange", check);
-    return () => {
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", check);
-    };
-  }, [voteDate, refreshBudget]);
-
   const reload = useCallback(() => {
     setEvents({});
     setIssues({});
@@ -147,7 +132,13 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
   const tap = (key: string) => (lastTap.current[key] = (lastTap.current[key] ?? 0) + 1);
 
   const setMyVote = useCallback(
-    (issueId: string, value: Vote) => {
+    (issueId: string, value: Vote, issue?: Track2Issue) => {
+      const selected = issues.items?.filter(i => i.my_vote === 1) ?? [];
+      const target = issues.items?.find(i => i.issue_id === issueId) ?? issue;
+      if (value === 1 && voteBudget?.votesRemaining === 0 && target && selected.length === 2 && !selected.some(i => i.issue_id === issueId)) {
+        setComparison([selected[0], selected[1], target]);
+        return Promise.resolve(false);
+      }
       const before = issues.items?.find((i) => i.issue_id === issueId)?.my_vote ?? 0;
       const apply = (v: Vote) =>
         setIssues((prev) => ({ ...prev, items: prev.items?.map((i) => (i.issue_id === issueId ? { ...i, my_vote: v } : i)) }));
@@ -173,7 +164,7 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
         },
       );
     },
-    [issues.items, refreshBudget],
+    [issues.items, refreshBudget, voteBudget],
   );
 
   const setGoing = useCallback((eventId: string, on: boolean) => {
@@ -267,6 +258,22 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
       }}
     >
       {children}
+      {comparison && <VoteComparison choices={comparison} onClose={closeComparison} onConfirm={async (removeId) => {
+        try {
+          const seq = ++budgetSeq.current;
+          const budget = await swapVote(comparison[2].issue_id, removeId, comparison.slice(0, 2).map(i => i.issue_id));
+          setIssues(prev => {
+            const items = prev.items?.map(i => i.issue_id === removeId ? { ...i, my_vote: 0 as const } : i.issue_id === comparison[2].issue_id ? { ...i, my_vote: 1 as const } : i);
+            return { ...prev, items: items && !items.some(i => i.issue_id === comparison[2].issue_id) ? [...items, { ...comparison[2], my_vote: 1 }] : items };
+          });
+          if (seq === budgetSeq.current) setVoteBudget(budget);
+          setComparison(null);
+          return true;
+        } catch {
+          reload();
+          return false;
+        }
+      }} />}
     </FeedContext.Provider>
   );
 }

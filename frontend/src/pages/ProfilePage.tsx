@@ -1,9 +1,8 @@
-import { TriangleAlert } from "lucide-react";
+import { Settings, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getMyHistory, USE_MOCK } from "../api/client";
 import { downloadHoursRecord, formatDay, formatHours } from "../lib/hours";
-import { useThemePref } from "../lib/theme";
 import { useAuth } from "../state/auth";
 import { useFeed } from "../state/feed";
 import type { VolunteerRecord } from "../types";
@@ -11,7 +10,6 @@ import type { VolunteerRecord } from "../types";
 const TZ = "America/Vancouver";
 
 export default function ProfilePage() {
-  const [theme, setTheme] = useThemePref();
   const { events, issues, signedIn, signIn, signOut } = useFeed();
   const { ready, name, picture, error: authError } = useAuth();
   const [history, setHistory] = useState<VolunteerRecord[] | null>(null);
@@ -39,19 +37,11 @@ export default function ProfilePage() {
     <div className="page">
       <header className="simple-header">
         <h1>Profile</h1>
+        <Link className="profile-settings icon-button" to="/settings" aria-label="Settings"><Settings size={22} /></Link>
       </header>
 
       <main className="page-content">
-        <section className="detail-section" aria-labelledby="appearance-heading">
-          <h2 id="appearance-heading">Appearance</h2>
-          <div className="place-actions" role="group" aria-label="Appearance">
-            {(["system", "light", "dark"] as const).map((option) => (
-              <button key={option} type="button" className="chip-button" aria-pressed={theme === option} onClick={() => setTheme(option)}>
-                {option === "system" ? "System" : option === "light" ? "Light" : "Dark"}
-              </button>
-            ))}
-          </div>
-        </section>
+        <Link className="community-link" to="/community-updates">Community updates <span aria-hidden="true">→</span></Link>
         <section className="profile-head">
           <span className="avatar" aria-hidden="true">
             {signedIn && picture ? (

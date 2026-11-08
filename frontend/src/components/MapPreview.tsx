@@ -43,6 +43,10 @@ export default function MapPreview({ lat, lng, label, onFail }: Props): ReactEle
     map.once('load', () => {
       loaded = true
       clearTimeout(timer)
+      // MapLibre initially expands compact attribution; start with just its info button.
+      const attribution = map.getContainer().querySelector<HTMLDetailsElement>('.maplibregl-ctrl-attrib.maplibregl-compact')
+      attribution?.classList.remove('maplibregl-compact-show')
+      attribution?.removeAttribute('open')
     })
     map.on('error', () => !loaded && onFail())
 

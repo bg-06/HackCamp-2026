@@ -39,10 +39,10 @@ export interface Feed {
   saveIssueLimit: (key: string, n: number) => void;
 
   // Update the list right away, then the backend. Resolves false (and undoes it) if the request failed.
-  setMyVote: (issueId: string, value: Vote) => Promise<boolean>;
+  setMyVote: (issueId: string, value: Vote, issue?: Track2Issue) => Promise<boolean>;
   voteBudget: VoteBudget | null; // null until loaded, or if the API can't say
-  voteLimitHit: boolean; // the last vote was refused because today's votes are used up
-  outOfVotes: boolean; // signed in with none left today: new up votes are turned off
+  voteLimitHit: boolean; // the last vote was refused because all active votes are in use
+  outOfVotes: boolean; // signed in with all active votes in use
   setGoing: (eventId: string, on: boolean) => Promise<boolean>;
 
   // Voting, signing up, commenting and starting an event need sign-in. requireSignIn runs the action

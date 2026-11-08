@@ -93,8 +93,9 @@ All data goes through `src/api/client.ts`. Pages never fetch on their own.
 | `createEvent(input)` | `POST /events` with `NewEvent` | `VolunteerEvent` (host = the signed-in user) |
 | `getTrack2Issues()` | `GET /issues` | `Track2Issue[]`, the whole list (`up_votes` without the current user's vote, which goes in `my_vote`) |
 | `getTrack2Issue(id)` | `GET /issues/:id` | `Track2Issue`, or `null` on 404 |
-| `setVote(id, value)` | `PUT /issues/:id/vote` with `{ value: 1 }`, or `DELETE` to take it back | `VoteBudget`; `429` when today's votes are used up |
-| `getVoteBudget()` | `GET /me/votes` | `VoteBudget` (votes left today) |
+| `setVote(id, value)` | `PUT /issues/:id/vote` with `{ value: 1 }`, or `DELETE` to take it back | `VoteBudget`; `429` when both active votes are in use |
+| `swapVote(id, removeId, expectedIds)` | `POST /issues/:id/vote/swap` | Atomically moves a vote; `409` if the active votes changed |
+| `getVoteBudget()` | `GET /me/votes` | `VoteBudget` (active votes and available slots) |
 | `getMyHistory()` | `GET /me/history` | `VolunteerRecord[]`, newest first |
 | `getComments(type, id)` | `GET /events/:id/comments` or `/issues/:id/comments` | `Comment[]`, oldest first |
 | `addComment(type, id, body)` | `POST` the same path with `{ body }` | `Comment` |
@@ -103,3 +104,9 @@ All data goes through `src/api/client.ts`. Pages never fetch on their own.
 
 Signing up, voting, commenting and starting an event need sign-in. The author of a comment must come from the session on the
 server, never from the request body. Comments are plain text; the page never renders HTML from them.
+
+The movable-vote UI requires the matching API and migration `009_active_vote_limit.sql`. That migration removes older active votes for accounts with more than two; review and coordinate it before running it against a shared database.
+
+## Installed app
+
+The manifest supplies standalone display, app icons and a start URL. Production builds register a service worker that displays a basic offline page when navigation fails. It does not cache API responses or account data; an active connection is needed for current content and voting. Installability requires HTTPS in deployment (localhost is also supported); installation behavior varies by browser and device. The service worker is disabled in the Vite development server.
