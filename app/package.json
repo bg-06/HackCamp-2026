@@ -6,6 +6,7 @@
     "build:scripts": "tsc",
     "db:migrate": "tsc && node dist/scripts/migrate.js",
     "ingest": "tsc && node dist/scripts/ingest.js refresh",
+    "ingest:history": "tsc && node dist/scripts/load-311-history.js",
     "ingest:311": "tsc && node dist/scripts/ingest.js refresh-311",
     "ingest:static": "tsc && node dist/scripts/ingest.js refresh-static",
     "ingest:status": "tsc && node dist/scripts/ingest.js status",
@@ -13,10 +14,15 @@
   },
   "dependencies": {
     "dotenv": "^16.4.7",
+    "hyparquet": "^1.32.0",
+    "pg": "^8.23.1",
+    "pg-copy-streams": "^7.0.0",
     "postgres": "^3.4.7"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "@types/pg": "^8.23.1",
+    "@types/pg-copy-streams": "^1.2.5",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
