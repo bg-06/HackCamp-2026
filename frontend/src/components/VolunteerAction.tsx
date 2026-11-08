@@ -26,7 +26,7 @@ export default function VolunteerAction({ event, onToggleGoing }: Props) {
   const full = total !== undefined && taken >= total && !going
 
   // can still be opened from an old link
-  if (Date.parse(event.endsAt) < openedAt) return <p className="muted">This one has finished.</p>
+  if (event.endsAt && Date.parse(event.endsAt) < openedAt) return <p className="muted">This one has finished.</p>
 
   if (event.signupUrl) {
     const link = safeLink(event.signupUrl)

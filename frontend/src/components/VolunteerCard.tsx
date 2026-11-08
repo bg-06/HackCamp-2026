@@ -5,11 +5,12 @@ import type { VolunteerEvent } from '../types'
 const TZ = 'America/Vancouver'
 
 // "Sat, Nov 15, 10:00am–12:00pm", always in Vancouver time.
-function formatWhen(startsAt: string, endsAt: string) {
+function formatWhen(startsAt: string | null, endsAt: string | null) {
+  if (!startsAt) return 'Ongoing program'
   const day = new Date(startsAt).toLocaleDateString('en-CA', { timeZone: TZ, weekday: 'short', month: 'short', day: 'numeric' })
   const time = (iso: string) =>
     new Date(iso).toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' }).replace(' ', '').toLowerCase()
-  return `${day}, ${time(startsAt)}–${time(endsAt)}`
+  return endsAt ? `${day}, ${time(startsAt)}–${time(endsAt)}` : `${day}, ${time(startsAt)}`
 }
 
 // The details. The sign-up button is in VolunteerAction, pinned to the bottom of the page.

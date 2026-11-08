@@ -24,9 +24,8 @@ function interests(events: VolunteerEvent[], issues: Track2Issue[]) {
   ])
 }
 
-// Compare as times, not strings: "10:00-07:00" vs "09:30-08:00" sorts wrong as text,
-// and the seed, the mock data and the backend don't all use the same offset.
-const time = (iso?: string) => (iso ? Date.parse(iso) : 0)
+// Compare as times, not strings: offsets vary. Ongoing programs follow dated events.
+const time = (iso?: string | null) => (iso ? Date.parse(iso) : Infinity)
 
 // Items with no place go last when sorting by distance.
 const byDistance = (from: LatLng) => (a: { lat?: number; lng?: number }, b: { lat?: number; lng?: number }) =>

@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { CommentTarget, FeedTab, HelpHotspot, LatLng, SortKey, Track2Issue, VolunteerEvent, Vote } from "../types";
+import type { CommentTarget, FeedTab, HelpHotspot, LatLng, SortKey, Track2Issue, VolunteerEvent, Vote, VoteBudget } from "../types";
 
 // No items and no error = still loading.
 export interface Loaded<T> {
@@ -37,6 +37,9 @@ export interface Feed {
 
   // Update the list right away, then the backend. Resolves false (and undoes it) if the request failed.
   setMyVote: (issueId: string, value: Vote) => Promise<boolean>;
+  voteBudget: VoteBudget | null; // null until loaded, or if the API can't say
+  voteLimitHit: boolean; // the last vote was refused because today's votes are used up
+  outOfVotes: boolean; // signed in with none left today: new up votes are turned off
   setGoing: (eventId: string, on: boolean) => Promise<boolean>;
 
   // Voting, signing up, commenting and starting an event need sign-in. requireSignIn runs the action

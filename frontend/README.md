@@ -3,7 +3,7 @@
 React + TypeScript + Vite. Mobile-first. Three tabs in the bottom nav:
 
 - **Volunteer** (`/`, green, Track 1): ways to help, run by the City, local groups and neighbours
-- **Issues** (`/issues`, deep blue, Track 2): City-only issues, voted up or down, with "Send the top 5 to Council"
+- **Issues** (`/issues`, deep blue, Track 2): City-only issues, up votes only (2 new votes a day), with "Send the top 5 to Council"
 - **Profile** (`/me`, charcoal): what you signed up for, your votes, your volunteer hours and a CSV download of them
 
 Volunteer is a two-column, photo-first feed, with a **Needs help** list above it: spots that keep getting
@@ -78,26 +78,28 @@ Everything shown is sample data for now, and sample listings say so.
 
 All data goes through `src/api/client.ts`. Pages never fetch on their own.
 
-1. Fill in the parts marked `TODO(backend)` in `src/api/client.ts`.
-2. Keep returning the shapes in `src/types.ts`. If your fields are named differently, convert them inside `client.ts`.
-3. Copy `.env.example` to `.env` and set `VITE_USE_MOCK=false`.
-4. In dev, `/api/*` is forwarded to `http://localhost:8000` (change it in `vite.config.ts`).
+1. Configure the root `.env` with the Postgres connection settings.
+2. From `app/`, run `npm run db:migrate`, then `npm run ingest:volunteer-events`, then `npm run api`.
+3. In another terminal, run `npm run dev` from `frontend/`; the real API is the default.
+4. In dev, `/api/*` is forwarded to `http://localhost:8000`. Set `VITE_API_BASE` for a deployed API. Use `npm run dev:mock` only for isolated UI work.
 
 | Function | Request | Returns |
 |---|---|---|
 | `getVolunteerEvents()` | `GET /events` | `VolunteerEvent[]` |
 | `getVolunteerEvent(id)` | `GET /events/:id` | `VolunteerEvent`, or `null` on 404 |
+| event image | `GET /events/:id/image` | Postgres-backed JPEG, PNG, WebP or GIF |
 | `setGoing(id, on)` | `POST` / `DELETE /events/:id/rsvp` | nothing |
 | `getHelpHotspots()` | `GET /hotspots` | `HelpHotspot[]` (gold_help_hotspots + cell centre) |
 | `createEvent(input)` | `POST /events` with `NewEvent` | `VolunteerEvent` (host = the signed-in user) |
-| `getTrack2Issues()` | `GET /issues` | `Track2Issue[]` (`up_votes`/`down_votes` without the current user's vote, which goes in `my_vote`) |
+| `getTrack2Issues()` | `GET /issues` | `Track2Issue[]`, the whole list (`up_votes` without the current user's vote, which goes in `my_vote`) |
 | `getTrack2Issue(id)` | `GET /issues/:id` | `Track2Issue`, or `null` on 404 |
-| `setVote(id, value)` | `PUT /issues/:id/vote` with `{ value: 1 or -1 }`, or `DELETE` to clear | nothing |
+| `setVote(id, value)` | `PUT /issues/:id/vote` with `{ value: 1 }`, or `DELETE` to take it back | `VoteBudget`; `429` when today's votes are used up |
+| `getVoteBudget()` | `GET /me/votes` | `VoteBudget` (votes left today) |
 | `getMyHistory()` | `GET /me/history` | `VolunteerRecord[]`, newest first |
 | `getComments(type, id)` | `GET /events/:id/comments` or `/issues/:id/comments` | `Comment[]`, oldest first |
 | `addComment(type, id, body)` | `POST` the same path with `{ body }` | `Comment` |
 
-`GET /events` should also send `commentCount` and `hotspotId`, and `GET /issues` a `comment_count`.
+`GET /events` includes `commentCount`, `hotspotId`, and `photoUrl` when an image exists. `GET /issues` includes `comment_count`.
 
 Signing up, voting, commenting and starting an event need sign-in. The author of a comment must come from the session on the
 server, never from the request body. Comments are plain text; the page never renders HTML from them.

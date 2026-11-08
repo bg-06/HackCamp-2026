@@ -149,7 +149,6 @@ function issue(
   days_open: number,
   times_reported_12m: number,
   up_votes: number,
-  down_votes: number,
   lat: number,
   lng: number,
   popularity: number,
@@ -166,7 +165,6 @@ function issue(
     times_reported_12m,
     base_score: Math.min(days_open, 90) / 10 + times_reported_12m,
     up_votes,
-    down_votes,
     my_vote: 0,
     lat,
     lng,
@@ -175,13 +173,13 @@ function issue(
 }
 
 export const TRACK2_ISSUES: Track2Issue[] = [
-  issue('t2-mtp-1', 'Pothole Case', 'Roads and Sidewalks', 'Mount Pleasant', 'E 10th Ave and Main St', 23, 6, 12, 1, 49.2619, -123.1007, 420),
-  issue('t2-mtp-2', 'Street Light Out Case', 'Lighting and Signals', 'Mount Pleasant', 'E 7th Ave and Quebec St', 14, 3, 9, 0, 49.2641, -123.103, 205),
-  issue('t2-mtp-3', 'Sidewalk Repair Case', 'Roads and Sidewalks', 'Mount Pleasant', 'Kingsway and E 12th Ave', 41, 2, 4, 2, 49.2604, -123.0967, 88),
-  issue('t2-mtp-4', 'Catch Basin Blocked Case', 'Water and Sewer', 'Mount Pleasant', 'Main St and E 15th Ave', 6, 4, 3, 5, 49.2569, -123.1009, 64),
-  issue('t2-mtp-5', 'Abandoned Mattress Case', 'Garbage and Dumping', 'Mount Pleasant', 'Lane behind 200 block E Broadway', 9, 5, 6, 0, 49.2627, -123.0995, 133),
-  issue('t2-kits-1', 'Street Light Out Case', 'Lighting and Signals', 'Kitsilano', 'W 4th Ave and Vine St', 14, 2, 9, 1, 49.268, -123.161, 176),
-  issue('t2-kits-2', 'Pothole Case', 'Roads and Sidewalks', 'Kitsilano', 'W Broadway and Macdonald St', 30, 4, 7, 3, 49.2638, -123.1683, 298),
-  issue('t2-strath-1', 'Street Litter Can Case', 'Garbage and Dumping', 'Strathcona', 'E Hastings St and Princess Ave', 2, 7, 5, 1, 49.2811, -123.0957, 117),
-  issue('t2-strath-2', 'Water Main Leak Case', 'Water and Sewer', 'Strathcona', 'Union St and Gore Ave', 3, 1, 2, 0, 49.2777, -123.0975, 59),
+  issue('t2-mtp-1', 'Pothole Case', 'Roads and Sidewalks', 'Mount Pleasant', 'E 10th Ave and Main St', 23, 6, 12, 49.2619, -123.1007, 420),
+  issue('t2-mtp-2', 'Street Light Out Case', 'Lighting and Signals', 'Mount Pleasant', 'E 7th Ave and Quebec St', 14, 3, 9, 49.2641, -123.103, 205),
+  issue('t2-mtp-3', 'Sidewalk Repair Case', 'Roads and Sidewalks', 'Mount Pleasant', 'Kingsway and E 12th Ave', 41, 2, 4, 49.2604, -123.0967, 88),
+  issue('t2-mtp-4', 'Catch Basin Blocked Case', 'Water and Sewer', 'Mount Pleasant', 'Main St and E 15th Ave', 6, 4, 3, 49.2569, -123.1009, 64),
+  issue('t2-mtp-5', 'Abandoned Mattress Case', 'Garbage and Dumping', 'Mount Pleasant', 'Lane behind 200 block E Broadway', 9, 5, 6, 49.2627, -123.0995, 133),
+  issue('t2-kits-1', 'Street Light Out Case', 'Lighting and Signals', 'Kitsilano', 'W 4th Ave and Vine St', 14, 2, 9, 49.268, -123.161, 176),
+  issue('t2-kits-2', 'Pothole Case', 'Roads and Sidewalks', 'Kitsilano', 'W Broadway and Macdonald St', 30, 4, 7, 49.2638, -123.1683, 298),
+  issue('t2-strath-1', 'Street Litter Can Case', 'Garbage and Dumping', 'Strathcona', 'E Hastings St and Princess Ave', 2, 7, 5, 49.2811, -123.0957, 117),
+  issue('t2-strath-2', 'Water Main Leak Case', 'Water and Sewer', 'Strathcona', 'Union St and Gore Ave', 3, 1, 2, 49.2777, -123.0975, 59),
 ]

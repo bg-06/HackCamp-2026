@@ -1,22 +1,31 @@
 // Every call to the backend goes through this file.
 //
-// Backend team: replace the parts marked TODO(backend). Pages and components
-// don't need to change, as long as these functions keep returning the types
-// in src/types.ts. If the backend uses different field names, convert them here.
-//
-// Mock mode is on by default. Set VITE_USE_MOCK=false in .env to use the real API.
+// Pages and components only depend on the types returned here. The Postgres-backed API is the
+// default; set VITE_USE_MOCK=true (or run npm run dev:mock) for isolated UI work.
 
 import { COMMENTS } from "../data/mockComments";
 import { HELP_HOTSPOTS, MY_HISTORY, TRACK2_ISSUES, VOLUNTEER_EVENTS } from "../data/mockData";
-import type { Comment, CommentTarget, HelpHotspot, NewEvent, Track2Issue, VolunteerEvent, VolunteerRecord, Vote } from "../types";
+import { DAILY_VOTES, vancouverToday } from "../lib/issues";
+import type { Comment, CommentTarget, HelpHotspot, NewEvent, Track2Issue, VolunteerEvent, VolunteerRecord, Vote, VoteBudget } from "../types";
 
-export const USE_MOCK = import.meta.env.VITE_USE_MOCK !== "false";
+export const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
 const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Give up after 15 s so a stuck request shows "Try again" instead of loading forever
 const TIMEOUT_MS = 15000;
+
+// A failed request. `body` is the parsed JSON error, if there was one (the vote limit sends its numbers there).
+export class ApiError extends Error {
+  status: number;
+  body: unknown;
+  constructor(status: number, body?: unknown) {
+    super(`Request failed (${status})`);
+    this.status = status;
+    this.body = body;
+  }
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -25,24 +34,32 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // merged, so adding an Authorization header later doesn't drop the content type
     headers: { "Content-Type": "application/json", ...init?.headers },
   });
-  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => undefined));
   // A 200/201 with an empty body is still a success (common for PUT and POST)
   const text = await res.text();
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
 /** Like request(), but a 404 means "doesn't exist" and returns null instead of throwing. */
-async function requestOrNull<T>(path: string): Promise<T | null> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`Request failed (${res.status})`);
-  return res.json() as Promise<T>;
+async function requestOrNull<T>(path: string, init?: RequestInit): Promise<T | null> {
+  try {
+    return await request<T>(path, init);
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  }
 }
 
 const countComments = (type: CommentTarget, id: string) => COMMENTS.filter((c) => c.targetType === type && c.targetId === id).length;
+
+function resolveApiAsset(path: string): string {
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${API_BASE.replace(/\/$/, "")}/${path.replace(/^\//, "")}`;
+}
+
+function normalizeEvent(event: VolunteerEvent): VolunteerEvent {
+  return event.photoUrl ? { ...event, photoUrl: resolveApiAsset(event.photoUrl) } : event;
+}
 
 /** Track 1: City events, local org events and events started from a hotspot. */
 export async function getVolunteerEvents(): Promise<VolunteerEvent[]> {
@@ -50,9 +67,7 @@ export async function getVolunteerEvents(): Promise<VolunteerEvent[]> {
     await wait(300);
     return VOLUNTEER_EVENTS.map((e) => ({ ...e, commentCount: countComments("event", e.id) }));
   }
-  // TODO(backend): GET /events → seed events + the app's `events` table, mapped to VolunteerEvent,
-  // with lat/lng, createdAt, popularity (searches + opens), commentCount, hotspotId and the current user's `going`.
-  return request<VolunteerEvent[]>("/events");
+  return (await request<VolunteerEvent[]>("/events")).map(normalizeEvent);
 }
 
 /** Spots that keep getting reported and neighbours could clean up, from gold_help_hotspots. */
@@ -61,7 +76,7 @@ export async function getHelpHotspots(): Promise<HelpHotspot[]> {
     await wait(300);
     return HELP_HOTSPOTS.map((h) => ({ ...h }));
   }
-  // TODO(backend): GET /hotspots → gold_help_hotspots with lat/lng (H3 cell centre), most reported first.
+  // GET /hotspots → gold_help_hotspots with lat/lng (H3 cell centre), most reported first.
   return request<HelpHotspot[]>("/hotspots");
 }
 
@@ -84,9 +99,7 @@ export async function createEvent(input: NewEvent): Promise<VolunteerEvent> {
     VOLUNTEER_EVENTS.push(e);
     return { ...e };
   }
-  // TODO(backend): POST /events. Needs sign-in; the organiser comes from the session.
-  // Then call the n8n "new event" webhook (plan.md section 9).
-  return request<VolunteerEvent>("/events", { method: "POST", body: JSON.stringify(input) });
+  return normalizeEvent(await request<VolunteerEvent>("/events", { method: "POST", body: JSON.stringify(input) }));
 }
 
 /** One event, or null if it doesn't exist. */
@@ -96,8 +109,8 @@ export async function getVolunteerEvent(id: string): Promise<VolunteerEvent | nu
     const e = VOLUNTEER_EVENTS.find((x) => x.id === id);
     return e ? { ...e } : null;
   }
-  // TODO(backend): GET /events/:id, 404 → null.
-  return requestOrNull<VolunteerEvent>(`/events/${encodeURIComponent(id)}`);
+  const event = await requestOrNull<VolunteerEvent>(`/events/${encodeURIComponent(id)}`);
+  return event ? normalizeEvent(event) : null;
 }
 
 /** Track 2: issues only the City can fix, with vote counts and the current user's vote. */
@@ -106,8 +119,9 @@ export async function getTrack2Issues(): Promise<Track2Issue[]> {
     await wait(300);
     return TRACK2_ISSUES.map((i) => ({ ...i, comment_count: countComments("issue", i.issue_id) }));
   }
-  // TODO(backend): GET /issues → gold_track2_issues joined with `votes` and a comment_count.
-  // up_votes/down_votes should NOT include the current user's vote; that goes in my_vote.
+  // up_votes leaves out the current user's vote; that's my_vote.
+  // The whole list (~3,000 issues): distance sort, "longest open" and search all run here in the browser,
+  // so a top-N cut would hide nearby or old issues that just don't score high.
   return request<Track2Issue[]>("/issues");
 }
 
@@ -118,7 +132,6 @@ export async function getTrack2Issue(id: string): Promise<Track2Issue | null> {
     const i = TRACK2_ISSUES.find((x) => x.issue_id === id);
     return i ? { ...i } : null;
   }
-  // TODO(backend): GET /issues/:id, 404 → null.
   return requestOrNull<Track2Issue>(`/issues/${encodeURIComponent(id)}`);
 }
 
@@ -129,7 +142,6 @@ export async function setGoing(eventId: string, on: boolean): Promise<void> {
     if (e) e.going = on; // kept until reload, so the feed and the detail page agree
     return;
   }
-  // TODO(backend): insert or delete the user's row in `rsvps`.
   await request<void>(`/events/${encodeURIComponent(eventId)}/rsvp`, {
     method: on ? "POST" : "DELETE",
   });
@@ -141,8 +153,6 @@ export async function getMyHistory(): Promise<VolunteerRecord[]> {
     await wait(200);
     return [...MY_HISTORY].sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
   }
-  // TODO(backend): GET /me/history → the user's rsvps on events with done_at set.
-  // hours = the host's count if they recorded one, otherwise the event's length.
   return request<VolunteerRecord[]>("/me/history");
 }
 
@@ -162,7 +172,6 @@ export async function getComments(type: CommentTarget, id: string): Promise<Comm
       (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt), // not string order: offsets differ
     );
   }
-  // TODO(backend): GET /events/:id/comments or /issues/:id/comments, from the `comments` table, oldest first.
   return request<Comment[]>(commentsPath(type, id));
 }
 
@@ -174,20 +183,49 @@ export async function addComment(type: CommentTarget, id: string, body: string):
     COMMENTS.push(c);
     return c;
   }
-  // TODO(backend): POST /events/:id/comments or /issues/:id/comments with { body }.
-  // Needs sign-in. The author comes from the session, never from the request body.
   return request<Comment>(commentsPath(type, id), { method: "POST", body: JSON.stringify({ body }) });
 }
 
-/** Up (1), down (-1) or clear (0) the current user's vote. One vote per user per issue. */
-export async function setVote(issueId: string, value: Vote): Promise<void> {
+// Mock mode keeps the daily count here, in memory, and starts over on a new Vancouver day.
+let mockVotesUsed = 0;
+let mockVoteDate = vancouverToday();
+const mockBudget = (): VoteBudget => {
+  if (mockVoteDate !== vancouverToday()) {
+    mockVoteDate = vancouverToday();
+    mockVotesUsed = 0;
+  }
+  return {
+    dailyLimit: DAILY_VOTES,
+    votesUsed: mockVotesUsed,
+    votesRemaining: Math.max(DAILY_VOTES - mockVotesUsed, 0),
+    voteDate: mockVoteDate,
+    resetsAt: "",
+  };
+};
+
+/** How many votes the user has left today. */
+export async function getVoteBudget(): Promise<VoteBudget> {
+  if (USE_MOCK) return mockBudget();
+  return request<VoteBudget>("/me/votes");
+}
+
+/**
+ * Up vote (1) or take it back (0). Taking it back doesn't refund the day's vote.
+ * Over the daily limit this throws an ApiError with status 429 and the budget in `body`.
+ */
+export async function setVote(issueId: string, value: Vote): Promise<VoteBudget> {
   if (USE_MOCK) {
     const i = TRACK2_ISSUES.find((x) => x.issue_id === issueId);
-    if (i) i.my_vote = value;
-    return;
+    if (!i) throw new ApiError(404, { error: "Issue not found" });
+    const budget = mockBudget();
+    if (value === 1 && i.my_vote !== 1) {
+      if (budget.votesRemaining === 0) throw new ApiError(429, { code: "DAILY_VOTE_LIMIT", ...budget });
+      mockVotesUsed++;
+    }
+    i.my_vote = value;
+    return mockBudget();
   }
-  // TODO(backend): upsert into `votes` (UNIQUE user_id, issue_id), or delete when value is 0.
-  await request<void>(`/issues/${encodeURIComponent(issueId)}/vote`, {
+  return request<VoteBudget>(`/issues/${encodeURIComponent(issueId)}/vote`, {
     method: value === 0 ? "DELETE" : "PUT",
     body: value === 0 ? undefined : JSON.stringify({ value }),
   });
