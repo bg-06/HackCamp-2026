@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import BottomNav from './components/BottomNav'
+import JumpToTop from './components/JumpToTop'
 import SignInPrompt from './components/SignInPrompt'
 import HomePage from './pages/HomePage'
 import IssuePage from './pages/IssuePage'
@@ -50,6 +51,7 @@ export default function App() {
           <Route path="/community-updates" element={<AgentPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        <JumpToTop />
         <BottomNav />
         <SignInPrompt />
       </div>
