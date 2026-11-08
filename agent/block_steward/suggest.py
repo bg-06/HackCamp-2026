@@ -14,11 +14,11 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from datetime import date, datetime
-from zoneinfo import ZoneInfo
+from datetime import date
 
 import h3
 
+from .timeutil import as_date as _as_date
 from .programs import CLEANUP_LINE, is_graffiti, program_for
 from .wording import is_plural, plain_words
 
@@ -26,18 +26,6 @@ AUTHOR = "block-steward-agent"
 MAX_ORG_KM = 2.0
 _MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-
-
-LOCAL_TZ = ZoneInfo("America/Vancouver")
-
-
-def _as_date(value) -> date:
-    """Local (Vancouver) calendar date; naive datetimes are already local."""
-    if isinstance(value, datetime):
-        if value.tzinfo is not None:
-            value = value.astimezone(LOCAL_TZ)
-        return value.date()
-    return value
 
 
 def _haversine_km(lat1, lng1, lat2, lng2) -> float:
