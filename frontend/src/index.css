@@ -103,6 +103,7 @@ button {
 
 /* Phone-width column, centred on desktop */
 .app {
+  height: 100vh; /* fallback for browsers without dvh: keeps the nav pinned */
   height: 100dvh;
   max-width: 440px;
   margin: 0 auto;
@@ -119,7 +120,8 @@ button {
 .page-content {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 12px 24px;
+  /* Clear the fixed bottom nav so the last row can scroll fully into view. */
+  padding: 16px 12px calc(24px + var(--nav-h) + env(safe-area-inset-bottom));
   /* No scrollbar: phones don't show one, and on desktop it ate into the column */
   scrollbar-width: none;
 }
@@ -815,7 +817,15 @@ a.tile:hover h3,
 
 /* ---------- Bottom navigation ---------- */
 .bottom-nav {
-  height: var(--nav-h);
+  /* Locked to the bottom of the screen, still matching the centred phone column. */
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5; /* below the sign-in sheet (10) so the sheet covers it */
+  max-width: 440px;
+  margin: 0 auto;
+  height: calc(var(--nav-h) + env(safe-area-inset-bottom));
   display: flex;
   border-top: 1px solid var(--border);
   background: var(--surface);
