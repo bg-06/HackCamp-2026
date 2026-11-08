@@ -11,5 +11,3 @@ These files do not publish a Devpost entry, create Auth0 users, seed the databas
 Repository sources reviewed: `frontend/README.md`, `frontend/src/state/auth.ts`, `app/server/auth.ts`, `docs/auth0-backend.md`, `app/db/migrations/002_app.sql`, `agent/README.md`, `databricks/README.md`.
 
 The event's public Devpost page lists a video maximum of 4 minutes, optional but highly recommended: https://hackcamp-2026.devpost.com/ . Recheck award-specific requirements before submitting.
-
-To add these files: extract this archive at the original repository root so the files are under `/submission`, review `git diff`, then commit on your own branch and open a pull request. Do not place the ZIP itself in the repository.

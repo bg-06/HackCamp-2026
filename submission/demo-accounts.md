@@ -24,7 +24,7 @@ Do not present differently named resident accounts as working admin/moderator ro
 1. Confirm the tenant, SPA client ID, API audience, allowed connection and exact deployed callback/logout/origin URLs with the frontend owner.
 2. Create or register separate test users using a connection enabled for that SPA. Use team-controlled test email addresses where needed; no real residents' accounts.
 3. Keep passwords in a private team credential channel or password manager. Do not add passwords, bearer tokens, client secrets or recovery codes to GitHub, Devpost or a recording.
-4. Sign in through the real frontend and verify that each account has its own Auth0 subject and application state. Do not use client-credentials tokens as resident logins.
+4. Sign in through the real frontend and verify that each account has its own Auth0 subject and application state. Do not use client-credentials tokens as resident logins; the API accepts them only on `/agent/*`.
 5. Coordinate the role/permission contract with the backend owner before assigning organization or moderator privileges. Confirm the server enforces those permissions.
 
 ## Demo data to prepare
@@ -45,6 +45,7 @@ Prefer existing application workflows for fixture creation. Coordinate any seed 
 - [ ] Resident login reaches the deployed app successfully.
 - [ ] Resident can RSVP, comment and vote; changes remain after refresh.
 - [ ] Resident 2 has a separate vote budget, signups and history.
+- [ ] Comments and resident-hosted events show a display name (first name plus last initial), never an Auth0 id.
 - [ ] Only an event host can complete that event.
 - [ ] A resident cannot invoke admin or moderation actions, once implemented.
 - [ ] Organization admin actions are restricted to the authorized organization, once implemented.

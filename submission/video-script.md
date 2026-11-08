@@ -45,11 +45,11 @@ Screen: a prepared architecture slide or verified Databricks dashboard.
 If showing a dashboard, confirm its queries work before recording. Do not imply a live refresh happened during the clip.
 
 ## 2:45–3:10 — Agent component, optional
-Screen: verified agent dry-run output, clearly labeled “Component preview — not live in-app delivery,” unless the full integration has since passed testing.
+Screen: verified agent output (dry-run, or a briefing returned by `GET /briefings`), clearly labeled “Component preview — not shown in the app yet,” unless the in-app screens have since been built and tested.
 
 “Our Block Steward component drafts event suggestions and weekly neighbourhood briefings. Gemini can help with wording, and a template works without it. The goal is to support organizers, with people keeping control over what gets published.”
 
-If delivery remains incomplete, add: “The generation component is implemented; connecting its output to the in-app review workflow is our next integration step.”
+If the in-app screens are still missing, add: “The agent already delivers its drafts to our API; showing them in the app for organizers to review is our next step.”
 
 ## 3:10–3:30 — Close
 Screen: return to the app, then project name and public URL.
