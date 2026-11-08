@@ -32,8 +32,8 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     getVolunteerEvents()
-      // finished ones drop off the feed (their pages still open from old links)
-      .then((items) => !cancelled && setEvents({ items: items.filter((e) => Date.parse(e.endsAt) > Date.now()) }))
+      // Finished dated events drop off; undated programs are ongoing and stay visible.
+      .then((items) => !cancelled && setEvents({ items: items.filter((e) => !e.endsAt || Date.parse(e.endsAt) > Date.now()) }))
       .catch((e: unknown) => !cancelled && setEvents({ error: errorText(e) }));
     getTrack2Issues()
       .then((items) => !cancelled && setIssues({ items }))
