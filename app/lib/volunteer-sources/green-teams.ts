@@ -63,14 +63,21 @@ export class GreenTeamsActivitiesAdapter {
     return posts.map((post) => {
       const title = cleanHtml(post.title.rendered)
       const content = cleanHtml(post.content.rendered)
-      const lowerMainland = /Lower Mainland Green Team|Vancouver|Burnaby|Richmond|Surrey|Langley|White Rock|New Westminster|Coquitlam/i.test(`${title} ${content}`)
+      const corpus = `${title} ${content}`
+      const explicitlyVictoria = /Greater Victoria Green Team|Vancouver Island|Victoria|Colwood|Langford|Saanich|View Royal|Esquimalt/i.test(corpus)
+      const explicitlyLowerMainland = /Lower Mainland Green Team|\bBurnaby\b|\bRichmond\b|\bSurrey\b|\bLangley\b|\bWhite Rock\b|\bNew Westminster\b|\bCoquitlam\b/i.test(corpus)
+      const organiser = explicitlyLowerMainland && !explicitlyVictoria
+        ? 'Lower Mainland Green Team'
+        : explicitlyVictoria
+          ? 'Greater Victoria Green Team'
+          : 'Green Teams of Canada'
       return {
         source: this.id,
         sourceKey: String(post.id),
         recordType: 'completed_activity' as const,
         title,
-        organiser: lowerMainland ? 'Lower Mainland Green Team' : 'Green Teams of Canada',
-        startsAt: post.date_gmt ? `${post.date_gmt}Z` : null,
+        organiser,
+        startsAt: null,
         endsAt: null,
         location: location(title),
         municipality: municipality(title),

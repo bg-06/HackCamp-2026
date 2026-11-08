@@ -14,28 +14,12 @@ function listingId(listing: VolunteerListing): string {
 }
 
 async function ensureRawTable(): Promise<void> {
-  await sql`
-    CREATE TABLE IF NOT EXISTS raw_volunteer_events (
-      source text NOT NULL,
-      source_key text NOT NULL,
-      record_type text NOT NULL,
-      title text NOT NULL,
-      organiser text,
-      starts_at timestamptz,
-      ends_at timestamptz,
-      location text,
-      municipality text,
-      category text,
-      signup_url text,
-      source_url text NOT NULL,
-      published_at timestamptz,
-      raw_record jsonb NOT NULL,
-      fetched_at timestamptz NOT NULL DEFAULT now(),
-      PRIMARY KEY (source, source_key)
-    )
+  const [row] = await sql<{ exists: boolean }[]>`
+    SELECT to_regclass('public.raw_volunteer_events') IS NOT NULL AS exists
   `
-  await sql`CREATE INDEX IF NOT EXISTS raw_volunteer_events_starts_idx ON raw_volunteer_events (starts_at)`
-  await sql`CREATE INDEX IF NOT EXISTS raw_volunteer_events_type_idx ON raw_volunteer_events (record_type, source)`
+  if (!row?.exists) {
+    throw new Error('raw_volunteer_events is missing. Apply app/db/migrations/004_volunteer_raw.sql before running this command.')
+  }
 }
 
 async function upsertRaw(record: RawVolunteerRecord): Promise<void> {
@@ -73,17 +57,18 @@ async function ensureAppSchema(): Promise<void> {
     ) AS exists
   `
   if (!row?.exists) {
-    throw new Error('The app events migration is not applied yet. Wait for Step 5, then run npm --prefix app run db:migrate.')
+    throw new Error('The app events schema is missing. Merge/apply Step 5 migration 002_app.sql before normalized event ingest; db:migrate on this branch only installs ingest tables.')
   }
 }
 
-async function upsert(listing: VolunteerListing): Promise<void> {
+async function upsert(listing: VolunteerListing): Promise<string> {
+  const id = listingId(listing)
   await sql`
     INSERT INTO events (
       id, kind, title, organiser, category, starts_at, ends_at, location, local_area,
       latitude, longitude, spots_total, what_to_bring, signup_url, is_sample, created_by
     ) VALUES (
-      ${listingId(listing)}, ${listing.kind}, ${listing.title}, ${listing.organiser},
+      ${id}, ${listing.kind}, ${listing.title}, ${listing.organiser},
       ${listing.category}, ${listing.startsAt}, ${listing.endsAt}, ${listing.location},
       ${listing.localArea}, ${listing.latitude}, ${listing.longitude}, ${listing.spotsTotal},
       ${listing.whatToBring}, ${listing.signupUrl}, false, ${`source:${listing.source}`}
@@ -105,20 +90,37 @@ async function upsert(listing: VolunteerListing): Promise<void> {
       is_sample = false,
       created_by = EXCLUDED.created_by
   `
+  return id
 }
 
 try {
   await ensureRawTable()
   const greenTeams = new GreenTeamsActivitiesAdapter()
-  const rawRecords = await greenTeams.fetchRecords()
-  for (const record of rawRecords) await upsertRaw(record)
-  console.log(`${greenTeams.id}: upserted ${rawRecords.length} raw records`)
+  try {
+    const rawRecords = await greenTeams.fetchRecords()
+    for (const record of rawRecords) await upsertRaw(record)
+    const keys = rawRecords.map((record) => record.sourceKey)
+    if (keys.length) {
+      await sql`DELETE FROM raw_volunteer_events WHERE source = ${greenTeams.id} AND source_key NOT IN ${sql(keys)}`
+    }
+    console.log(`${greenTeams.id}: upserted ${rawRecords.length} raw records`)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(`${greenTeams.id}: ${message}`)
+    process.exitCode = 1
+  }
 
   await ensureAppSchema()
   for (const source of volunteerSources) {
     try {
       const listings = await source.fetchListings()
-      for (const listing of listings) await upsert(listing)
+      const ids: string[] = []
+      for (const listing of listings) ids.push(await upsert(listing))
+      if (ids.length) {
+        await sql`DELETE FROM events WHERE created_by = ${`source:${source.id}`} AND id NOT IN ${sql(ids)}`
+      } else {
+        await sql`DELETE FROM events WHERE created_by = ${`source:${source.id}`}`
+      }
       console.log(`${source.id}: upserted ${listings.length} listings`)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

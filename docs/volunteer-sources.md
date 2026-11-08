@@ -6,7 +6,7 @@ Run the TypeScript adapters with:
 npm --prefix app run ingest:volunteer-events
 ```
 
-The command always creates and fills `raw_volunteer_events`, a provenance-rich landing table for Databricks federation. The app migration from Step 5 must also be applied because normalized listings are upserted into `events`. External events keep their organiser's signup URL; Block by Block does not take registrations for them.
+Apply `app/db/migrations/004_volunteer_raw.sql` before running the command; it owns the `raw_volunteer_events` schema. The app migration from Step 5 must also be applied because normalized listings are upserted into `events`. External events keep their organiser's signup URL; Block by Block does not take registrations for them.
 
 ## Postgres landing table
 
@@ -35,5 +35,5 @@ The adapter reads only the public group events HTML and schema.org JSON-LD. It d
 - Respect `robots.txt` and source terms.
 - Use public event pages only; never scrape content behind login.
 - Keep the external `signup_url` and do not represent Block by Block as the organiser.
-- Deterministic IDs make refreshes idempotent.
+- Deterministic IDs make refreshes idempotent; after a successful source refresh, listings removed by that source are removed locally too.
 - A source failure does not block other adapters, but the command exits non-zero so scheduled jobs can alert.

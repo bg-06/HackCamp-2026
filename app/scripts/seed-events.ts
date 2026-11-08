@@ -32,6 +32,15 @@ const file = await access(real).then(() => real, () => join(seedDir, 'volunteer_
 const events = JSON.parse(await readFile(file, 'utf8')) as SeedEvent[]
 
 try {
+  const [schema] = await sql<{ exists: boolean }[]>`
+    SELECT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'events' AND column_name = 'signup_url'
+    ) AS exists
+  `
+  if (!schema?.exists) {
+    throw new Error('The app events schema is missing. Merge/apply Step 5 migration 002_app.sql before running db:seed-events; db:migrate on this branch only installs ingest tables.')
+  }
   for (const e of events) {
     await sql`
       INSERT INTO events (id, kind, title, organiser, category, starts_at, ends_at, location, local_area,
