@@ -21,7 +21,7 @@ FROM (
 -- @requires bbb_app.public.events
 -- Did it work? 311 reports of the event's category in its cell + ring, 60 days before vs after done_at.
 -- Postgres events: id, h3_r9 text (res 9), category text, done_at timestamptz.
--- opened_at is a Vancouver wall-clock timestamp; convert it back to UTC before comparing instants.
+-- opened_at is a Vancouver wall-clock timestamp. Convert it back to UTC before comparing instants.
 CREATE OR REPLACE TABLE bbb.gold.event_impact
 COMMENT '311 reports near each finished event, 60 days before vs after'
 AS SELECT CAST(e.id AS STRING) AS event_id, e.h3_r9, e.category, e.done_at,
