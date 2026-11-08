@@ -1,15 +1,16 @@
 import { ChevronUp } from 'lucide-react'
 import { issueScore } from '../lib/issues'
+import { useFeed } from '../state/feed'
 import type { Track2Issue, Vote } from '../types'
 
 interface Props {
   issue: Track2Issue
   onVote: (id: string, value: Vote) => void
-  outOfVotes?: boolean // today's votes are used up
   compact?: boolean // in the list: no label on the button
 }
 
-export default function VoteControl({ issue, onVote, outOfVotes, compact }: Props) {
+export default function VoteControl({ issue, onVote, compact }: Props) {
+  const { outOfVotes } = useFeed()
   const { up, score } = issueScore(issue)
   const voted = issue.my_vote === 1
   const title = issue.request_type.replace(/ Case$/, '')

@@ -8,6 +8,7 @@
 
 import { COMMENTS } from "../data/mockComments";
 import { HELP_HOTSPOTS, MY_HISTORY, TRACK2_ISSUES, VOLUNTEER_EVENTS } from "../data/mockData";
+import { DAILY_VOTES, vancouverToday } from "../lib/issues";
 import type { Comment, CommentTarget, HelpHotspot, NewEvent, Track2Issue, VolunteerEvent, VolunteerRecord, Vote, VoteBudget } from "../types";
 
 export const USE_MOCK = import.meta.env.VITE_USE_MOCK !== "false";
@@ -43,14 +44,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 /** Like request(), but a 404 means "doesn't exist" and returns null instead of throwing. */
-async function requestOrNull<T>(path: string): Promise<T | null> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`Request failed (${res.status})`);
-  return res.json() as Promise<T>;
+async function requestOrNull<T>(path: string, init?: RequestInit): Promise<T | null> {
+  try {
+    return await request<T>(path, init);
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  }
 }
 
 const countComments = (type: CommentTarget, id: string) => COMMENTS.filter((c) => c.targetType === type && c.targetId === id).length;
@@ -72,9 +72,8 @@ export async function getHelpHotspots(): Promise<HelpHotspot[]> {
     await wait(300);
     return HELP_HOTSPOTS.map((h) => ({ ...h }));
   }
-  // TODO(backend): GET /hotspots → gold_help_hotspots with lat/lng (H3 cell centre), most reported first.
-  // until the API has this route, a 404 just means no "Needs help" list
-  return (await requestOrNull<HelpHotspot[]>("/hotspots")) ?? [];
+  // GET /hotspots → gold_help_hotspots with lat/lng (H3 cell centre), most reported first.
+  return request<HelpHotspot[]>("/hotspots");
 }
 
 /** Start an event, usually from a hotspot. The signed-in user is the host. */
@@ -119,8 +118,9 @@ export async function getTrack2Issues(): Promise<Track2Issue[]> {
     return TRACK2_ISSUES.map((i) => ({ ...i, comment_count: countComments("issue", i.issue_id) }));
   }
   // up_votes leaves out the current user's vote; that's my_vote.
-  // The full list is ~3,000 issues (1.2 MB). The API sends them most pressing first, so the top 500 is plenty.
-  return request<Track2Issue[]>("/issues?limit=500");
+  // The whole list (~3,000 issues): distance sort, "longest open" and search all run here in the browser,
+  // so a top-N cut would hide nearby or old issues that just don't score high.
+  return request<Track2Issue[]>("/issues");
 }
 
 /** One issue, or null if it doesn't exist (for example, the City closed it). */
@@ -155,7 +155,7 @@ export async function getMyHistory(): Promise<VolunteerRecord[]> {
   }
   // TODO(backend): GET /me/history → the user's rsvps on events with done_at set.
   // hours = the host's count if they recorded one, otherwise the event's length.
-  return (await requestOrNull<VolunteerRecord[]>("/me/history")) ?? [];
+  return request<VolunteerRecord[]>("/me/history");
 }
 
 // ---------- Comments (the discussion under each post) ----------
@@ -191,15 +191,22 @@ export async function addComment(type: CommentTarget, id: string, body: string):
   return request<Comment>(commentsPath(type, id), { method: "POST", body: JSON.stringify({ body }) });
 }
 
-// Mock mode keeps the daily count here, in memory.
+// Mock mode keeps the daily count here, in memory, and starts over on a new Vancouver day.
 let mockVotesUsed = 0;
-const mockBudget = (): VoteBudget => ({
-  dailyLimit: 2,
-  votesUsed: mockVotesUsed,
-  votesRemaining: Math.max(2 - mockVotesUsed, 0),
-  voteDate: new Date().toLocaleDateString("en-CA", { timeZone: "America/Vancouver" }),
-  resetsAt: "",
-});
+let mockVoteDate = vancouverToday();
+const mockBudget = (): VoteBudget => {
+  if (mockVoteDate !== vancouverToday()) {
+    mockVoteDate = vancouverToday();
+    mockVotesUsed = 0;
+  }
+  return {
+    dailyLimit: DAILY_VOTES,
+    votesUsed: mockVotesUsed,
+    votesRemaining: Math.max(DAILY_VOTES - mockVotesUsed, 0),
+    voteDate: mockVoteDate,
+    resetsAt: "",
+  };
+};
 
 /** How many votes the user has left today. */
 export async function getVoteBudget(): Promise<VoteBudget> {
@@ -214,11 +221,13 @@ export async function getVoteBudget(): Promise<VoteBudget> {
 export async function setVote(issueId: string, value: Vote): Promise<VoteBudget> {
   if (USE_MOCK) {
     const i = TRACK2_ISSUES.find((x) => x.issue_id === issueId);
-    if (value === 1 && i?.my_vote !== 1) {
-      if (mockVotesUsed >= 2) throw new ApiError(429, { code: "DAILY_VOTE_LIMIT", ...mockBudget() });
+    if (!i) throw new ApiError(404, { error: "Issue not found" });
+    const budget = mockBudget();
+    if (value === 1 && i.my_vote !== 1) {
+      if (budget.votesRemaining === 0) throw new ApiError(429, { code: "DAILY_VOTE_LIMIT", ...budget });
       mockVotesUsed++;
     }
-    if (i) i.my_vote = value;
+    i.my_vote = value;
     return mockBudget();
   }
   return request<VoteBudget>(`/issues/${encodeURIComponent(issueId)}/vote`, {

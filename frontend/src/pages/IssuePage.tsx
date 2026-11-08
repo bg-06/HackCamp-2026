@@ -15,7 +15,7 @@ export default function IssuePage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { issues, setMyVote, requireSignIn, voteBudget } = useFeed();
+  const { issues, setMyVote, requireSignIn } = useFeed();
 
   // Opened from the feed: use the issue we already have. Opened from a link: fetch it.
   const cached = issues.items?.find((i) => i.issue_id === id);
@@ -132,7 +132,7 @@ export default function IssuePage() {
       {issue && (
         <div className="action-bar">
           <p className="muted small">Does this affect you? Votes set the order of the list neighbours send to Council.</p>
-          <VoteControl issue={issue} onVote={vote} outOfVotes={voteBudget?.votesRemaining === 0} />
+          <VoteControl issue={issue} onVote={vote} />
           <VotesLeft />
         </div>
       )}

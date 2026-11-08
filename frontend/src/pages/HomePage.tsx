@@ -45,7 +45,6 @@ export default function HomePage() {
     getScroll,
     saveScroll,
     setMyVote,
-    voteBudget,
     requireSignIn,
   } = useFeed();
   const [sortOpen, setSortOpen] = useState(false);
@@ -103,7 +102,6 @@ export default function HomePage() {
   const issueById = new Map((issues.items ?? []).map((i) => [i.issue_id, i]));
   const shownIssues = (issueOrder?.ids ?? []).flatMap((id) => issueById.get(id) ?? []);
   const totalVotes = (issues.items ?? []).reduce((n, i) => n + issueScore(i).up, 0);
-  const outOfVotes = voteBudget?.votesRemaining === 0;
 
   // Spots that keep getting reported and have nothing planned yet
   const planned = new Set((events.items ?? []).map((e) => e.hotspotId).filter(Boolean));
@@ -344,7 +342,6 @@ export default function HomePage() {
                     rank={issueOrder?.rank.get(i.issue_id) ?? 0}
                     distanceKm={here ? distanceTo(here, i) : undefined}
                     onVote={vote}
-                    outOfVotes={outOfVotes}
                   />
                 </li>
               ))}

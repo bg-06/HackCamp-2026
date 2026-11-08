@@ -39,6 +39,7 @@ export interface Feed {
   setMyVote: (issueId: string, value: Vote) => Promise<boolean>;
   voteBudget: VoteBudget | null; // null until loaded, or if the API can't say
   voteLimitHit: boolean; // the last vote was refused because today's votes are used up
+  outOfVotes: boolean; // signed in with none left today: new up votes are turned off
   setGoing: (eventId: string, on: boolean) => Promise<boolean>;
 
   // Voting, signing up, commenting and starting an event need sign-in. requireSignIn runs the action

@@ -90,7 +90,7 @@ All data goes through `src/api/client.ts`. Pages never fetch on their own.
 | `setGoing(id, on)` | `POST` / `DELETE /events/:id/rsvp` | nothing |
 | `getHelpHotspots()` | `GET /hotspots` | `HelpHotspot[]` (gold_help_hotspots + cell centre) |
 | `createEvent(input)` | `POST /events` with `NewEvent` | `VolunteerEvent` (host = the signed-in user) |
-| `getTrack2Issues()` | `GET /issues` | `Track2Issue[]` (`up_votes`/`down_votes` without the current user's vote, which goes in `my_vote`) |
+| `getTrack2Issues()` | `GET /issues` | `Track2Issue[]`, the whole list (`up_votes` without the current user's vote, which goes in `my_vote`) |
 | `getTrack2Issue(id)` | `GET /issues/:id` | `Track2Issue`, or `null` on 404 |
 | `setVote(id, value)` | `PUT /issues/:id/vote` with `{ value: 1 }`, or `DELETE` to take it back | `VoteBudget`; `429` when today's votes are used up |
 | `getVoteBudget()` | `GET /me/votes` | `VoteBudget` (votes left today) |
