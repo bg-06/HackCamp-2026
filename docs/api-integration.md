@@ -8,10 +8,12 @@ It does not merge or deploy the Databricks PR.
 
 Install the app lockfile dependencies with `npm --prefix app ci`, then obtain approval
 before running `npm --prefix app run db:migrate` against the shared team database.
-The new `006_vote_budget.sql` adds immutable vote casts and per-user/day usage rows,
-and backfills allowance from existing upvote timestamps. Removing votes never refunds
-usage. No existing votes are deleted; legacy downvotes remain stored but are ignored
-by the API and the updated Databricks priority SQL.
+`006_vote_budget.sql` introduced historical cast and daily-usage records. The newer
+`009_active_vote_limit.sql` changes the active-vote model: for accounts with more
+than two active votes on open issues, it removes all but the two most recently cast.
+Review how many accounts and votes this affects before applying it to a shared
+database. Historical cast records and legacy downvotes remain stored; downvotes are
+ignored by the API and the updated Databricks priority SQL.
 
 Restart/deploy the API after migrations. `npm --prefix app run api` starts it locally.
 The branch does not change the frontend, seed times, or create sample events in the
@@ -41,33 +43,28 @@ before Genie priority scores adopt the new formula.
   and never include future/incomplete events. These are RSVP-based estimates, not
   verified attendance or certified volunteer hours. Completed RSVPs cannot be added
   or removed via the regular RSVP endpoints; historical participation is retained.
-- **GET `/me/votes`** returns the daily budget below. Use it to render votes left today.
+- **GET `/me/votes`** returns the active-vote budget below. Use it to render available slots.
 - **PUT `/issues/:id/vote`**, body `{ "value": 1 }`, returns 200 with the budget plus
   `myVote: 1`. Other values, including -1, return 400. A repeated active upvote does
-  not spend allowance or change its timestamp.
-- **DELETE `/issues/:id/vote`** returns 200 with the budget plus `myVote: 0`. It never
-  refunds allowance. Recasting after removal spends another vote.
-- The third new cast in the same Vancouver calendar day returns **429** with
-  `code: "DAILY_VOTE_LIMIT"`, `error`, and budget fields. Parse that JSON to show the
-  limit message. A database row lock serializes same-user casts/removals across API
-  workers. The current vote's `created_at` and immutable `vote_casts.cast_at` record
-  its time. Daily usage survives vote removal, closed issues, and API restarts.
+  not consume another slot or change its timestamp.
+- **DELETE `/issues/:id/vote`** returns 200 with the budget plus `myVote: 0` and frees a slot.
+- A third active vote returns **429** with `code: "VOTE_LIMIT"`, `error`, and budget fields.
+  **POST `/issues/:id/vote/swap`**, body `{ "removeIssueId": "...", "expectedIssueIds": ["...", "..."] }`,
+  atomically replaces an existing vote with the issue in the URL. It returns **409** if
+  the active votes changed since the comparison. A per-user row lock serializes vote
+  changes across API workers. Votes for issues absent from the open feed do not consume a slot.
 
 Budget example:
 
 ```json
 {
-  "dailyLimit": 2,
+  "limit": 2,
   "votesUsed": 1,
-  "votesRemaining": 1,
-  "voteDate": "2026-11-08",
-  "resetsAt": "2026-11-09T07:00:00.000Z"
+  "votesRemaining": 1
 }
 ```
 
-The day and next reset use `America/Vancouver`, not the client device timezone.
-The shared Postgres timezone was checked read-only and returned UTC-07:00 for the
-current Vancouver dates.
+There is no daily reset. See `frontend/README.md` for the comparison and discovery UI requirements.
 
 Issue responses keep `up_votes` excluding the caller and `my_vote` as 0/1 to preserve
 the existing frontend convention. `down_votes` is always 0. New `score` includes

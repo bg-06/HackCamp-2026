@@ -5,7 +5,7 @@
 
 import { COMMENTS } from "../data/mockComments";
 import { HELP_HOTSPOTS, MY_HISTORY, TRACK2_ISSUES, VOLUNTEER_EVENTS } from "../data/mockData";
-import { DAILY_VOTES, vancouverToday } from "../lib/issues";
+import { DAILY_VOTES } from "../lib/issues";
 import type { Comment, CommentTarget, HelpHotspot, NewEvent, Track2Issue, VolunteerEvent, VolunteerRecord, Vote, VoteBudget } from "../types";
 
 export const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
@@ -216,20 +216,13 @@ export async function addComment(type: CommentTarget, id: string, body: string):
   return request<Comment>(commentsPath(type, id), { method: "POST", body: JSON.stringify({ body }) });
 }
 
-// Mock mode keeps the daily count here, in memory, and starts over on a new Vancouver day.
-let mockVotesUsed = 0;
-let mockVoteDate = vancouverToday();
+// Mock mode uses the same active-vote limit as the API.
 const mockBudget = (): VoteBudget => {
-  if (mockVoteDate !== vancouverToday()) {
-    mockVoteDate = vancouverToday();
-    mockVotesUsed = 0;
-  }
+  const mockVotesUsed = TRACK2_ISSUES.filter(i => i.my_vote === 1).length;
   return {
-    dailyLimit: DAILY_VOTES,
+    limit: DAILY_VOTES,
     votesUsed: mockVotesUsed,
     votesRemaining: Math.max(DAILY_VOTES - mockVotesUsed, 0),
-    voteDate: mockVoteDate,
-    resetsAt: "",
   };
 };
 
@@ -249,8 +242,7 @@ export async function setVote(issueId: string, value: Vote): Promise<VoteBudget>
     if (!i) throw new ApiError(404, { error: "Issue not found" });
     const budget = mockBudget();
     if (value === 1 && i.my_vote !== 1) {
-      if (budget.votesRemaining === 0) throw new ApiError(429, { code: "DAILY_VOTE_LIMIT", ...budget });
-      mockVotesUsed++;
+      if (budget.votesRemaining === 0) throw new ApiError(429, { code: "VOTE_LIMIT", ...budget });
     }
     i.my_vote = value;
     return mockBudget();
@@ -258,5 +250,20 @@ export async function setVote(issueId: string, value: Vote): Promise<VoteBudget>
   return request<VoteBudget>(`/issues/${encodeURIComponent(issueId)}/vote`, {
     method: value === 0 ? "DELETE" : "PUT",
     body: value === 0 ? undefined : JSON.stringify({ value }),
+  });
+}
+
+export async function swapVote(issueId: string, removeIssueId: string, expectedIssueIds: string[]): Promise<VoteBudget> {
+  if (USE_MOCK) {
+    const active = TRACK2_ISSUES.filter(i => i.my_vote === 1);
+    const target = TRACK2_ISSUES.find(i => i.issue_id === issueId);
+    const removed = active.find(i => i.issue_id === removeIssueId);
+    if (!target || !removed || active.length !== 2 || active.some(i => !expectedIssueIds.includes(i.issue_id))) throw new ApiError(409, { error: "Your votes changed" });
+    removed.my_vote = 0;
+    target.my_vote = 1;
+    return mockBudget();
+  }
+  return request<VoteBudget>(`/issues/${encodeURIComponent(issueId)}/vote/swap`, {
+    method: "POST", body: JSON.stringify({ removeIssueId, expectedIssueIds }),
   });
 }

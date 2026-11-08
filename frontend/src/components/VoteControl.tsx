@@ -21,10 +21,9 @@ export default function VoteControl({ issue, onVote, compact }: Props) {
         className={`vote-button up ${voted ? 'on' : ''}`}
         aria-pressed={voted}
         aria-label={`Pressing (${up} ${up === 1 ? 'vote' : 'votes'})`}
-        title={outOfVotes && !voted ? "You've used today's votes" : "This affects me, it's pressing"}
+        title={outOfVotes && !voted ? 'Compare your priorities' : "This affects me, it's pressing"}
         // tapping your vote again takes it back
         onClick={() => onVote(issue.issue_id, voted ? 0 : 1)}
-        disabled={outOfVotes && !voted}
       >
         <ChevronUp size={20} aria-hidden="true" />
         {!compact && <span>{voted ? 'Voted' : 'Pressing'}</span>}
