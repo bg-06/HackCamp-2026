@@ -17,15 +17,13 @@ export default function AgentPage() {
 
   useEffect(() => {
     let active = true
-    setBriefings(null); setBriefingError(false)
     getBriefings().then(rows => { if (active) setBriefings(rows) }).catch(() => { if (active) setBriefingError(true) })
-    return () => { active = false }
+    return () => { active = false; setBriefings(null); setBriefingError(false) }
   }, [reload])
   useEffect(() => {
     let active = true
-    setSuggestions(null); setSuggestionError(false)
     if (signedIn) getSuggestions().then(rows => { if (active) setSuggestions(rows) }).catch(() => { if (active) setSuggestionError(true) })
-    return () => { active = false }
+    return () => { active = false; setSuggestions(null); setSuggestionError(false) }
   }, [signedIn, reload])
   const dismiss = useCallback(async (id: string) => {
     setBusy(id); setDismissError(false)

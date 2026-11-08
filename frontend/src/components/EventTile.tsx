@@ -1,4 +1,5 @@
 import { MessageCircle } from 'lucide-react'
+import type { CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import { categoryStyle, KIND_LABELS } from '../data/categories'
 import { formatKm } from '../lib/geo'
@@ -21,13 +22,12 @@ export default function EventTile({ event, ratio, distanceKm }: Props) {
     ? start.toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' }).replace(':00', '').replace(' ', '').toLowerCase()
     : null
   // where and when, the two things people decide on
-  const meta = [distanceKm !== undefined ? formatKm(distanceKm) : event.localArea, time].filter(Boolean).join(' · ')
+  const meta = [when, time, distanceKm !== undefined ? formatKm(distanceKm) : event.localArea].filter(Boolean).join(' · ')
 
   return (
     <Link className="tile" to={`/volunteer/${encodeURIComponent(event.id)}`}>
-      <div className="tile-cover" style={{ aspectRatio: `1 / ${ratio}`, background: style.bg, color: style.fg }}>
+      <div className="tile-cover" style={{ aspectRatio: `1 / ${ratio}`, '--cover-bg': style.bg, '--cover-fg': style.fg } as CSSProperties}>
         {event.photoUrl ? <img src={event.photoUrl} alt="" loading="lazy" /> : <Icon size={32} strokeWidth={1.5} aria-hidden="true" />}
-        {when && <span className="tile-tag">{when}</span>}
       </div>
       <div className="tile-body">
         {event.kind !== 'org' && <p className="eyebrow">{KIND_LABELS[event.kind].label}</p>}
