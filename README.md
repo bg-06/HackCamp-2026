@@ -1,4 +1,4 @@
-# Block by Block
+# GreenHands BC
 
 Turn Vancouver's neighbourhood data into ways to help, one block at a time.
 
@@ -8,7 +8,7 @@ Built at **HackCamp 2026** (nwPlus, UBC Vancouver).
 
 ## What it does
 
-Seeing a problem in your neighbourhood is easy. Knowing what to do about it is harder. Block by Block uses the City of Vancouver's 311 data to split local issues by who can actually fix them:
+Seeing a problem in your neighbourhood is easy. Knowing what to do about it is harder. GreenHands BC uses the City of Vancouver's 311 data to split local issues by who can actually fix them:
 
 - **Volunteer (Track 1): neighbours can help.** Recurring litter, small abandoned items and street debris become cleanup opportunities; graffiti becomes a walk to survey and report it, never a paint-out. Spots that keep getting reported and have nothing planned show up under **Needs help**, and anyone can start an event from one. The feed also lists City programs and local organisations' events; those link out to the original sign-up page.
 - **Issues (Track 2): only the City can fix it.** Potholes, streetlights and damaged sidewalks. Residents prioritise up to two open issues at a time and can send the top five to Council as an email draft from their own mail app. We don't send anything to the City or claim votes change City decisions.
@@ -99,4 +99,4 @@ React, TypeScript, Vite, MapLibre, Express, PostgreSQL, Auth0, Databricks, H3, P
 
 ## Data
 
-City data comes from the [City of Vancouver Open Data Portal](https://opendata.vancouver.ca/) under the Open Government Licence – Vancouver. Block by Block is a student project and is not affiliated with or endorsed by the City of Vancouver.
+City data comes from the [City of Vancouver Open Data Portal](https://opendata.vancouver.ca/) under the Open Government Licence – Vancouver. GreenHands BC is a student project and is not affiliated with or endorsed by the City of Vancouver.
