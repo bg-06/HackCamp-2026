@@ -41,9 +41,7 @@ SELECT request_type, address, open_cases, days_open, times_reported_12m, round(b
 SELECT local_area, count(*) AS hotspots FROM bbb.gold.help_hotspots WHERE local_area IS NOT NULL GROUP BY local_area ORDER BY hotspots DESC;
 ```
 
-Note: `help_hotspots` is empty until the Postgres load covers the last few months, so this returns no rows for now.
-
-**Alternative for question 3 (works without `help_hotspots`):** counts spots with 3+ Track 1 cases in the last 12 months of data.
+**Alternative for question 3:** counts spots with 3+ Track 1 cases in the last 12 months of data, computed directly from `cases_enriched`.
 
 ```sql
 SELECT local_area, count(*) AS hotspots FROM (SELECT local_area, h3_r9, request_type FROM bbb.gold.cases_enriched WHERE track = 'neighbours' AND local_area IS NOT NULL AND h3_r9 IS NOT NULL AND opened_at >= (SELECT max(opened_at) FROM bbb.gold.cases_enriched) - INTERVAL 12 MONTHS GROUP BY local_area, h3_r9, request_type HAVING count(*) >= 3) GROUP BY local_area ORDER BY hotspots DESC;

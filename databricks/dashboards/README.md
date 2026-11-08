@@ -12,4 +12,4 @@
 4. Use one fixed colour for `neighbours` and another for `city` in every chart, the same as the app.
 5. Click **Publish**.
 
-Note: queries 1, 3, 4 and 5 filter relative to today's date. If the data does not reach the present (for example while the Postgres load is partial), those charts will be empty until fresh data arrives.
+Note: queries 3, 4 and 5 filter relative to today's date (last 12 months or 90 days). The data reaches 2026-11-07, so they return rows now; if the data stops updating, those charts will thin out and eventually go empty.
