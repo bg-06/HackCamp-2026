@@ -18,7 +18,7 @@ OPTIONS (
 CREATE FOREIGN CATALOG IF NOT EXISTS bbb_app USING CONNECTION bbb_pg OPTIONS (database '${pg_db}');
 
 -- Hand-checked fixes to the AI's track for a request type ('neighbours' | 'city' | 'none').
--- Read by bbb.gold.cases_enriched; edit with plain INSERT / DELETE.
+-- Read by bbb.gold.cases_enriched. Edit with plain INSERT / DELETE.
 CREATE TABLE IF NOT EXISTS bbb.gold.track_overrides (
   request_type STRING NOT NULL,
   track STRING NOT NULL,
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS bbb.gold.track_overrides (
 -- Seed overrides: Track 1 picks from ai_classify (checked 2026-11-07) that volunteers shouldn't do.
 -- MERGE so re-running setup updates these rows and leaves any rows added by hand alone.
 MERGE INTO bbb.gold.track_overrides t
-USING (VALUES
+USING (SELECT * FROM VALUES
   ('Feces Clean Up Case',                                'city', 'health hazard, needs City crews'),
   ('Abandoned Mattress Case',                            'city', 'bulky item, needs a City pickup'),
   ('Abandoned Non-Recyclables-Large Case',               'city', 'bulky items, needs a City pickup'),
@@ -40,7 +40,8 @@ USING (VALUES
   ('Graffiti Removal - Commercial Waste Container Case', 'none', 'bin owner must remove it'),
   ('Graffiti Management Program Case',                   'none', 'program inquiry, not a place'),
   ('Adopt a Catch Basin Program Inquiry Case',           'none', 'program inquiry, not a place')
-) AS s(request_type, track, note)
+  AS v(request_type, track, note)
+) s
 ON t.request_type = s.request_type
 WHEN MATCHED THEN UPDATE SET track = s.track, note = s.note
 WHEN NOT MATCHED THEN INSERT (request_type, track, note) VALUES (s.request_type, s.track, s.note);

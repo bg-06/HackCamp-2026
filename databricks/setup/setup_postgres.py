@@ -80,6 +80,12 @@ def run_sql(warehouse_id, statement):
         raise RuntimeError(f"{statement.splitlines()[0]} -> {state}: {resp['status'].get('error')}")
 
 
+def statements(sql):
+    """Split a SQL file on ';' after dropping full-line '--' comments (they may contain ';')."""
+    code = "\n".join(l for l in sql.splitlines() if not l.strip().startswith("--"))
+    return [st.strip() for st in code.split(";") if st.strip()]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--warehouse-id")
@@ -94,11 +100,9 @@ def main():
     sql = sql.replace("${pg_host}", env["POSTGRES_HOST"]).replace("${pg_port}", env["POSTGRES_PORT"])
     sql = sql.replace("${pg_db}", env["POSTGRES_DB"])
     wh = pick_warehouse(a.warehouse_id)
-    for stmt in [s.strip() for s in sql.split(";")]:
-        body = "\n".join(l for l in stmt.splitlines() if not l.strip().startswith("--")).strip()
-        if body:
-            run_sql(wh, body)
-            print("ok:", body.splitlines()[0])
+    for body in statements(sql):
+        run_sql(wh, body)
+        print("ok:", body.splitlines()[0])
     print("Done. Check with: SHOW TABLES IN bbb_app.public")
 
 
