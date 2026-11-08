@@ -8,7 +8,7 @@
 
 import { COMMENTS } from "../data/mockComments";
 import { HELP_HOTSPOTS, MY_HISTORY, TRACK2_ISSUES, VOLUNTEER_EVENTS } from "../data/mockData";
-import type { Comment, CommentTarget, HelpHotspot, NewEvent, Track2Issue, VolunteerEvent, VolunteerRecord, Vote } from "../types";
+import type { Comment, CommentTarget, HelpHotspot, NewEvent, Track2Issue, VolunteerEvent, VolunteerRecord, Vote, VoteBudget } from "../types";
 
 export const USE_MOCK = import.meta.env.VITE_USE_MOCK !== "false";
 const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
@@ -18,6 +18,17 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 // Give up after 15 s so a stuck request shows "Try again" instead of loading forever
 const TIMEOUT_MS = 15000;
 
+// A failed request. `body` is the parsed JSON error, if there was one (the vote limit sends its numbers there).
+export class ApiError extends Error {
+  status: number;
+  body: unknown;
+  constructor(status: number, body?: unknown) {
+    super(`Request failed (${status})`);
+    this.status = status;
+    this.body = body;
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -25,7 +36,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // merged, so adding an Authorization header later doesn't drop the content type
     headers: { "Content-Type": "application/json", ...init?.headers },
   });
-  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => undefined));
   // A 200/201 with an empty body is still a success (common for PUT and POST)
   const text = await res.text();
   return (text ? JSON.parse(text) : undefined) as T;
@@ -107,8 +118,7 @@ export async function getTrack2Issues(): Promise<Track2Issue[]> {
     await wait(300);
     return TRACK2_ISSUES.map((i) => ({ ...i, comment_count: countComments("issue", i.issue_id) }));
   }
-  // TODO(backend): GET /issues → gold_track2_issues joined with `votes` and a comment_count.
-  // up_votes/down_votes should NOT include the current user's vote; that goes in my_vote.
+  // up_votes leaves out the current user's vote; that's my_vote.
   // The full list is ~3,000 issues (1.2 MB). The API sends them most pressing first, so the top 500 is plenty.
   return request<Track2Issue[]>("/issues?limit=500");
 }
@@ -181,15 +191,37 @@ export async function addComment(type: CommentTarget, id: string, body: string):
   return request<Comment>(commentsPath(type, id), { method: "POST", body: JSON.stringify({ body }) });
 }
 
-/** Up (1), down (-1) or clear (0) the current user's vote. One vote per user per issue. */
-export async function setVote(issueId: string, value: Vote): Promise<void> {
+// Mock mode keeps the daily count here, in memory.
+let mockVotesUsed = 0;
+const mockBudget = (): VoteBudget => ({
+  dailyLimit: 2,
+  votesUsed: mockVotesUsed,
+  votesRemaining: Math.max(2 - mockVotesUsed, 0),
+  voteDate: new Date().toLocaleDateString("en-CA", { timeZone: "America/Vancouver" }),
+  resetsAt: "",
+});
+
+/** How many votes the user has left today. */
+export async function getVoteBudget(): Promise<VoteBudget> {
+  if (USE_MOCK) return mockBudget();
+  return request<VoteBudget>("/me/votes");
+}
+
+/**
+ * Up vote (1) or take it back (0). Taking it back doesn't refund the day's vote.
+ * Over the daily limit this throws an ApiError with status 429 and the budget in `body`.
+ */
+export async function setVote(issueId: string, value: Vote): Promise<VoteBudget> {
   if (USE_MOCK) {
     const i = TRACK2_ISSUES.find((x) => x.issue_id === issueId);
+    if (value === 1 && i?.my_vote !== 1) {
+      if (mockVotesUsed >= 2) throw new ApiError(429, { code: "DAILY_VOTE_LIMIT", ...mockBudget() });
+      mockVotesUsed++;
+    }
     if (i) i.my_vote = value;
-    return;
+    return mockBudget();
   }
-  // TODO(backend): upsert into `votes` (UNIQUE user_id, issue_id), or delete when value is 0.
-  await request<void>(`/issues/${encodeURIComponent(issueId)}/vote`, {
+  return request<VoteBudget>(`/issues/${encodeURIComponent(issueId)}/vote`, {
     method: value === 0 ? "DELETE" : "PUT",
     body: value === 0 ? undefined : JSON.stringify({ value }),
   });

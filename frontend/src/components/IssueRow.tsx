@@ -10,9 +10,10 @@ interface Props {
   rank: number
   distanceKm?: number
   onVote: (id: string, value: Vote) => void
+  outOfVotes?: boolean
 }
 
-export default function IssueRow({ issue, rank, distanceKm, onVote }: Props) {
+export default function IssueRow({ issue, rank, distanceKm, onVote, outOfVotes }: Props) {
   const style = categoryStyle(issue.category)
   const Icon = style.icon
   const meta = [`Open ${issue.days_open} ${issue.days_open === 1 ? 'day' : 'days'}`, distanceKm !== undefined ? formatKm(distanceKm) : null]
@@ -43,7 +44,7 @@ export default function IssueRow({ issue, rank, distanceKm, onVote }: Props) {
         </div>
       </Link>
       <div className="issue-row-vote">
-        <VoteControl issue={issue} onVote={onVote} compact />
+        <VoteControl issue={issue} onVote={onVote} outOfVotes={outOfVotes} compact />
       </div>
     </article>
   )

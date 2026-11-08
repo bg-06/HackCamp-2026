@@ -5,6 +5,7 @@ import { getTrack2Issue } from "../api/client";
 import Discussion from "../components/Discussion";
 import PlaceSection from "../components/PlaceSection";
 import VoteControl from "../components/VoteControl";
+import VotesLeft from "../components/VotesLeft";
 import { categoryStyle } from "../data/categories";
 import { VAN311_URL } from "../lib/issues";
 import { useFeed } from "../state/feed";
@@ -14,7 +15,7 @@ export default function IssuePage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { issues, setMyVote, requireSignIn } = useFeed();
+  const { issues, setMyVote, requireSignIn, voteBudget } = useFeed();
 
   // Opened from the feed: use the issue we already have. Opened from a link: fetch it.
   const cached = issues.items?.find((i) => i.issue_id === id);
@@ -131,7 +132,8 @@ export default function IssuePage() {
       {issue && (
         <div className="action-bar">
           <p className="muted small">Does this affect you? Votes set the order of the list neighbours send to Council.</p>
-          <VoteControl issue={issue} onVote={vote} />
+          <VoteControl issue={issue} onVote={vote} outOfVotes={voteBudget?.votesRemaining === 0} />
+          <VotesLeft />
         </div>
       )}
     </div>

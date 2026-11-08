@@ -457,10 +457,9 @@ a.tile:hover h3,
   background: var(--track2);
   color: #fff;
 }
-.vote-button.down.on {
-  border-color: var(--text-muted);
-  background: var(--text-muted);
-  color: #fff;
+.vote-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 .vote-score {
   min-width: 28px;

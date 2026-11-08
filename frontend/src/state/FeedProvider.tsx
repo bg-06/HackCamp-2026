@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { getHelpHotspots, getTrack2Issues, getVolunteerEvents, setGoing as saveGoing, setVote } from "../api/client";
+import { ApiError, getHelpHotspots, getTrack2Issues, getVolunteerEvents, getVoteBudget, setGoing as saveGoing, setVote } from "../api/client";
 import { inVancouver } from "../lib/geo";
-import type { CommentTarget, FeedTab, HelpHotspot, LatLng, SortKey, Track2Issue, VolunteerEvent, Vote } from "../types";
+import type { CommentTarget, FeedTab, HelpHotspot, LatLng, SortKey, Track2Issue, VolunteerEvent, Vote, VoteBudget } from "../types";
 import { FeedContext, type Loaded, type LocateStatus } from "./feed";
 
 function errorText(e: unknown) {
@@ -13,6 +13,8 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
   const [issues, setIssues] = useState<Loaded<Track2Issue>>({});
   const [hotspots, setHotspots] = useState<Loaded<HelpHotspot>>({});
   const [reloadKey, setReloadKey] = useState(0);
+  const [voteBudget, setVoteBudget] = useState<VoteBudget | null>(null);
+  const [voteLimitHit, setVoteLimitHit] = useState(false);
 
   const [here, setHere] = useState<LatLng | null>(null);
   const [locStatus, setLocStatus] = useState<LocateStatus>("off");
@@ -41,6 +43,10 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
     getHelpHotspots()
       .then((items) => !cancelled && setHotspots({ items }))
       .catch((e: unknown) => !cancelled && setHotspots({ error: errorText(e) }));
+    // not worth an error message: without it the page just doesn't say how many votes are left
+    getVoteBudget()
+      .then((b) => !cancelled && setVoteBudget(b))
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -100,9 +106,17 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
         setIssues((prev) => ({ ...prev, items: prev.items?.map((i) => (i.issue_id === issueId ? { ...i, my_vote: v } : i)) }));
       const n = tap(`vote:${issueId}`);
       apply(value);
+      setVoteLimitHit(false);
       return setVote(issueId, value).then(
-        () => true,
-        () => {
+        (budget) => {
+          if (budget) setVoteBudget(budget);
+          return true;
+        },
+        (e: unknown) => {
+          if (e instanceof ApiError && e.status === 429) {
+            setVoteLimitHit(true);
+            setVoteBudget(e.body as VoteBudget);
+          }
           if (lastTap.current[`vote:${issueId}`] === n) apply(before);
           return false;
         },
@@ -182,6 +196,8 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
         getScroll,
         saveScroll,
         setMyVote,
+        voteBudget,
+        voteLimitHit,
         setGoing,
         signedIn,
         requireSignIn,

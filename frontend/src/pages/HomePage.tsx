@@ -4,6 +4,7 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import { USE_MOCK } from "../api/client";
 import EventTile from "../components/EventTile";
 import IssueRow from "../components/IssueRow";
+import VotesLeft from "../components/VotesLeft";
 import MasonryFeed from "../components/MasonryFeed";
 import TopBar from "../components/TopBar";
 import { coverRatio, requestTypeInSentence } from "../lib/cover";
@@ -44,6 +45,7 @@ export default function HomePage() {
     getScroll,
     saveScroll,
     setMyVote,
+    voteBudget,
     requireSignIn,
   } = useFeed();
   const [sortOpen, setSortOpen] = useState(false);
@@ -100,7 +102,8 @@ export default function HomePage() {
   );
   const issueById = new Map((issues.items ?? []).map((i) => [i.issue_id, i]));
   const shownIssues = (issueOrder?.ids ?? []).flatMap((id) => issueById.get(id) ?? []);
-  const totalVotes = (issues.items ?? []).reduce((n, i) => n + issueScore(i).up + issueScore(i).down, 0);
+  const totalVotes = (issues.items ?? []).reduce((n, i) => n + issueScore(i).up, 0);
+  const outOfVotes = voteBudget?.votesRemaining === 0;
 
   // Spots that keep getting reported and have nothing planned yet
   const planned = new Set((events.items ?? []).map((e) => e.hotspotId).filter(Boolean));
@@ -234,9 +237,10 @@ export default function HomePage() {
           <section className="intro">
             <h2>What needs fixing in {CITY.name}</h2>
             <p>
-              Only the City can fix these. Vote up if it affects you, down if it's not a problem or already fixed.
+              Only the City can fix these. Vote for the ones that affect you.
               {issues.items && ` ${totalVotes} ${totalVotes === 1 ? "vote" : "votes"} so far.`}
             </p>
+            <VotesLeft />
             <p className="muted small">The number is a priority score: votes, plus how long it's been open and how often it's reported.</p>
             <a className="text-link" href={VAN311_URL} target="_blank" rel="noopener noreferrer">
               Report something new in Van311 ↗
@@ -340,6 +344,7 @@ export default function HomePage() {
                     rank={issueOrder?.rank.get(i.issue_id) ?? 0}
                     distanceKm={here ? distanceTo(here, i) : undefined}
                     onVote={vote}
+                    outOfVotes={outOfVotes}
                   />
                 </li>
               ))}
