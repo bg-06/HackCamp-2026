@@ -27,7 +27,9 @@ export default function ProfilePage() {
     };
   }, [reloadKey, signedIn]);
 
-  const upcoming = (events.items ?? []).filter((e) => e.going).sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
+  const upcoming = (events.items ?? [])
+    .filter((e) => e.going)
+    .sort((a, b) => (a.startsAt ? Date.parse(a.startsAt) : Infinity) - (b.startsAt ? Date.parse(b.startsAt) : Infinity));
   const votes = (issues.items ?? []).filter((i) => i.my_vote !== 0);
   const totalHours = (history ?? []).reduce((n, r) => n + r.hours, 0);
 
@@ -97,7 +99,9 @@ export default function ProfilePage() {
                     <li key={e.id}>
                       <Link className="row-link" to={`/volunteer/${encodeURIComponent(e.id)}`}>
                         <span className="eyebrow">
-                          {new Date(e.startsAt).toLocaleDateString("en-CA", { timeZone: TZ, weekday: "short", month: "short", day: "numeric" })}
+                          {e.startsAt
+                            ? new Date(e.startsAt).toLocaleDateString("en-CA", { timeZone: TZ, weekday: "short", month: "short", day: "numeric" })
+                            : "Ongoing"}
                         </span>
                         <span className="row-title">{e.title}</span>
                         <span className="muted small">{e.location}</span>
@@ -119,8 +123,8 @@ export default function ProfilePage() {
                   {votes.map((i) => (
                     <li key={i.issue_id}>
                       <Link className="row-link with-mark" to={`/issues/${encodeURIComponent(i.issue_id)}`}>
-                        <span className={`vote-mark ${i.my_vote === 1 ? "up" : "down"}`} aria-label={i.my_vote === 1 ? "Voted pressing" : "Voted not a problem"}>
-                          {i.my_vote === 1 ? "▲" : "▼"}
+                        <span className="vote-mark up" aria-label="Voted pressing">
+                          ▲
                         </span>
                         <span>
                           <span className="row-title">{i.request_type.replace(/ Case$/, "")}</span>

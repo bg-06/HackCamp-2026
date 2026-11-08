@@ -26,6 +26,7 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
     is_sample: boolean; latitude: number | null; longitude: number | null; h3_r9: string | null
     created_at: Date; created_by: string | null; done_at: Date | null; hotspot_id: string | null
     source_withdrawn_at: Date | null; spots_taken: number; going: boolean; comment_count: number
+    has_image: boolean
     hs_request_type: string | null; hs_times_reported: number | null; hs_months_seen: number | null
   }
 
@@ -36,6 +37,7 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
              e.local_area, e.spots_total, e.what_to_bring, e.signup_url, e.is_sample,
              e.latitude, e.longitude, e.h3_r9, e.created_at, e.created_by, e.done_at, e.hotspot_id, e.source_withdrawn_at,
              (SELECT count(*)::int FROM comments c WHERE c.event_id = e.id AND NOT c.hidden) AS comment_count,
+             EXISTS (SELECT 1 FROM event_images i WHERE i.event_id = e.id) AS has_image,
              count(r.user_id) FILTER (WHERE ${user}::text IS NULL OR r.user_id <> ${user})::int AS spots_taken,
              coalesce(bool_or(r.user_id = ${user}), false) AS going,
              h.request_type AS hs_request_type, h.times_reported::int AS hs_times_reported,
@@ -65,6 +67,7 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
       ...(inApp ? { spotsTotal: r.spots_total!, spotsTaken: r.spots_taken } : {}),
       ...(r.what_to_bring ? { whatToBring: r.what_to_bring } : {}),
       ...(r.signup_url ? { signupUrl: r.signup_url } : {}),
+      ...(r.has_image ? { photoUrl: `/events/${encodeURIComponent(r.id)}/image` } : {}),
       ...(r.hs_request_type
         ? { hotspot: { requestType: r.hs_request_type, timesReported: r.hs_times_reported ?? 0, monthsSeen: r.hs_months_seen ?? 0 } }
         : {}),
@@ -272,9 +275,39 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
       e.source_withdrawn_at IS NULL AND e.done_at IS NULL AND (
         e.starts_at >= now() - interval '1 day'
         OR (e.starts_at IS NULL AND e.ends_at IS NULL AND e.kind IN ('city', 'org') AND e.signup_url IS NOT NULL)
+      ) AND (
+        -- sample events only fill the feed while there are no real ones
+        NOT e.is_sample
+        OR NOT EXISTS (
+          SELECT 1 FROM events real
+          WHERE NOT real.is_sample AND real.source_withdrawn_at IS NULL AND real.done_at IS NULL
+            AND (real.starts_at >= now() - interval '1 day'
+              OR (real.starts_at IS NULL AND real.ends_at IS NULL AND real.kind IN ('city', 'org') AND real.signup_url IS NOT NULL))
+        )
       )
     `)
     res.json(rows.map(toEvent))
+  })
+
+  type EventImageRow = { data: Buffer; mime_type: string; byte_length: number; etag: string }
+
+  app.get('/events/:id/image', async (req, res) => {
+    const [image] = await sql<EventImageRow[]>`
+      SELECT data, mime_type, byte_length,
+             '"' || encode(sha256(data), 'hex') || '"' AS etag
+      FROM event_images
+      WHERE event_id = ${req.params.id}`
+    if (!image) return void res.status(404).json({ error: 'event image not found' })
+
+    res.set({
+      'Content-Type': image.mime_type,
+      'Content-Length': String(image.byte_length),
+      'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
+      ETag: image.etag,
+      'X-Content-Type-Options': 'nosniff',
+    })
+    if (req.fresh) return void res.status(304).end()
+    res.end(image.data)
   })
 
   app.get('/events/:id', async (req, res) => {

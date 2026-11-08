@@ -15,11 +15,13 @@ interface Props {
 export default function EventTile({ event, ratio, distanceKm }: Props) {
   const style = categoryStyle(event.category)
   const Icon = style.icon
-  const start = new Date(event.startsAt)
-  const when = start.toLocaleDateString('en-CA', { timeZone: TZ, month: 'short', day: 'numeric' })
-  const time = start.toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' }).replace(':00', '').replace(' ', '').toLowerCase()
+  const start = event.startsAt ? new Date(event.startsAt) : null
+  const when = start ? start.toLocaleDateString('en-CA', { timeZone: TZ, month: 'short', day: 'numeric' }) : 'Ongoing'
+  const time = start
+    ? start.toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' }).replace(':00', '').replace(' ', '').toLowerCase()
+    : null
   // where and when, the two things people decide on
-  const meta = [distanceKm !== undefined ? formatKm(distanceKm) : event.localArea, time].join(' · ')
+  const meta = [distanceKm !== undefined ? formatKm(distanceKm) : event.localArea, time].filter(Boolean).join(' · ')
 
   return (
     <Link className="tile" to={`/volunteer/${encodeURIComponent(event.id)}`}>

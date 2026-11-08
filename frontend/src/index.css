@@ -1,32 +1,27 @@
-/* Block by Block styles.
-   Kept deliberately plain: flat surfaces, hairline borders, one accent colour per tab, and type
-   (size, weight, grey) for hierarchy instead of badges, gradients and shadows. */
+/* Block by Block styles. Dark, image-led feed with a single blue interaction accent. */
 
 :root {
-  --blue: #0f6cb6;
-  --blue-dark: #0b5592;
-  --blue-light: #e3effa;
-  --green: #4e9f3d;
-  --green-dark: #2f7a2a;
-  --green-light: #e6f4e1;
+  --blue: #3b82f6;
+  --blue-dark: #60a5fa;
+  --blue-light: #172554;
+  --green: var(--blue);
+  --green-dark: var(--blue);
+  --green-light: var(--blue-light);
+  --navy: var(--blue);
+  --navy-light: var(--blue-light);
 
-  /* Deep blue for Issues (the team's original pick). White text on it and it as text on white are both 7.6:1. */
-  --navy: #005981;
-  --navy-light: #e3eef4;
+  --bg: #111114;
+  --surface: #1c1c20;
+  --surface-muted: #26262b;
+  --border: #303036;
+  --text: #f4f4f5;
+  --text-muted: #a5a5ad;
+  --warning: #f0a35e;
 
-  --bg: #ffffff;
-  --surface: #ffffff;
-  --surface-muted: #f2f4f6;
-  --border: #e3e7eb;
-  --text: #13293d;
-  --text-muted: #5b6b7b;
-  --warning: #a8530b;
-
-  /* The two tracks: green = neighbours can help, deep blue = only the City can fix it */
-  --track1: var(--green-dark);
-  --track1-light: var(--green-light);
-  --track2: var(--navy);
-  --track2-light: var(--navy-light);
+  --track1: var(--blue);
+  --track1-light: var(--blue-light);
+  --track2: var(--blue);
+  --track2-light: var(--blue-light);
 
   --radius: 8px;
   --nav-h: 60px;
@@ -102,19 +97,18 @@ button {
 }
 
 /* ---------- Header ---------- */
-/* Green for Volunteer. Dark navy text, because white on this green is too low-contrast. */
 .home-header {
-  --header-bg: #6db33f;
-  --header-ink: #13293d;
-  --header-tint: rgb(255 255 255 / 25%);
+  --header-bg: var(--bg);
+  --header-ink: var(--text);
+  --header-tint: var(--surface-muted);
   background: var(--header-bg);
   color: var(--header-ink);
+  border-bottom: 1px solid var(--border);
 }
-/* Deep blue for Issues, with white text */
 .home-header.track-issues {
-  --header-bg: var(--navy);
-  --header-ink: #ffffff;
-  --header-tint: rgb(255 255 255 / 20%);
+  --header-bg: var(--bg);
+  --header-ink: var(--text);
+  --header-tint: var(--surface-muted);
 }
 .home-header :focus-visible {
   outline-color: var(--header-ink);
@@ -124,8 +118,9 @@ button {
   display: grid;
   place-items: center;
   height: 60px;
-  background: #33414d;
-  color: #ffffff;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
 }
 .simple-header h1 {
   margin: 0;
@@ -284,20 +279,26 @@ button {
 /* ---------- Two-column feed ---------- */
 .masonry {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   align-items: start;
   margin-bottom: 16px;
 }
 .masonry-col {
   display: grid;
+  min-width: 0;
   gap: 8px;
+}
+.masonry-col > * {
+  min-width: 0;
 }
 .tile {
   display: block;
+  min-width: 0;
+  width: 100%;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: none;
+  border-radius: 0;
   background: var(--surface);
 }
 .tile-link {
@@ -328,7 +329,7 @@ a.tile:hover h3,
   padding: 4px 7px;
   border-radius: 9999px;
   background: #ffffff;
-  color: var(--text);
+  color: #18181b;
   font-size: 0.7rem;
   font-weight: 700;
   line-height: 1;
@@ -359,6 +360,7 @@ a.tile:hover h3,
 /* ---------- Issues list: one row each, the vote split off by a thin line ---------- */
 .issue-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr); /* a long title gets cut off instead of pushing the vote off screen */
   gap: 8px;
   margin: 0 0 16px;
   padding: 0;
@@ -366,8 +368,8 @@ a.tile:hover h3,
 }
 .issue-row {
   display: flex;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: none;
+  border-radius: 0;
   background: var(--surface);
 }
 .issue-row-main {
@@ -456,10 +458,9 @@ a.tile:hover h3,
   background: var(--track2);
   color: #fff;
 }
-.vote-button.down.on {
-  border-color: var(--text-muted);
-  background: var(--text-muted);
-  color: #fff;
+.vote-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 .vote-score {
   min-width: 28px;
@@ -732,7 +733,7 @@ a.tile:hover h3,
   font-size: 0.72rem;
 }
 .bottom-nav a.active {
-  color: var(--text);
+  color: var(--blue-dark);
   font-weight: 700;
 }
 

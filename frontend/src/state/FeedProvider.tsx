@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { getHelpHotspots, getTrack2Issues, getVolunteerEvents, setGoing as saveGoing, setVote, USE_MOCK } from "../api/client";
+import { ApiError, getHelpHotspots, getTrack2Issues, getVolunteerEvents, getVoteBudget, setGoing as saveGoing, setVote, USE_MOCK } from "../api/client";
 import { useAuth } from "./auth";
 import { inVancouver } from "../lib/geo";
-import type { CommentTarget, FeedTab, HelpHotspot, LatLng, SortKey, Track2Issue, VolunteerEvent, Vote } from "../types";
+import { vancouverToday } from "../lib/issues";
+import type { CommentTarget, FeedTab, HelpHotspot, LatLng, SortKey, Track2Issue, VolunteerEvent, Vote, VoteBudget } from "../types";
 import { FeedContext, type Loaded, type LocateStatus } from "./feed";
+
+// The vote routes' JSON, or something else (an empty body, a proxy's error page)
+function isBudget(x: unknown): x is VoteBudget {
+  return typeof x === "object" && x !== null && typeof (x as VoteBudget).votesRemaining === "number";
+}
 
 function errorText(e: unknown) {
   return e instanceof Error ? e.message : String(e);
@@ -14,6 +20,19 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
   const [issues, setIssues] = useState<Loaded<Track2Issue>>({});
   const [hotspots, setHotspots] = useState<Loaded<HelpHotspot>>({});
   const [reloadKey, setReloadKey] = useState(0);
+  const [voteBudget, setVoteBudget] = useState<VoteBudget | null>(null);
+  const [voteLimitHit, setVoteLimitHit] = useState(false);
+
+  // Numbers each budget request. Only the latest one may set the budget, so a slow response
+  // from an earlier vote can't put back a count that's already out of date.
+  const budgetSeq = useRef(0);
+  const refreshBudget = useCallback(() => {
+    const seq = ++budgetSeq.current;
+    // not worth an error message: without it the page just doesn't say how many votes are left
+    getVoteBudget()
+      .then((b) => seq === budgetSeq.current && setVoteBudget(b))
+      .catch(() => {});
+  }, []);
 
   const [here, setHere] = useState<LatLng | null>(null);
   const [locStatus, setLocStatus] = useState<LocateStatus>("off");
@@ -39,8 +58,8 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
     if (authKey === null) return;
     let cancelled = false;
     getVolunteerEvents()
-      // finished ones drop off the feed (their pages still open from old links)
-      .then((items) => !cancelled && setEvents({ items: items.filter((e) => Date.parse(e.endsAt) > Date.now()) }))
+      // Finished dated events drop off; undated programs are ongoing and stay visible.
+      .then((items) => !cancelled && setEvents({ items: items.filter((e) => !e.endsAt || Date.parse(e.endsAt) > Date.now()) }))
       .catch((e: unknown) => !cancelled && setEvents({ error: errorText(e) }));
     getTrack2Issues()
       .then((items) => !cancelled && setIssues({ items }))
@@ -48,10 +67,29 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
     getHelpHotspots()
       .then((items) => !cancelled && setHotspots({ items }))
       .catch((e: unknown) => !cancelled && setHotspots({ error: errorText(e) }));
+    // /me/votes needs an account; signed out there's no budget to show
+    if (authKey !== "false") refreshBudget();
     return () => {
       cancelled = true;
     };
-  }, [reloadKey, authKey]);
+  }, [reloadKey, authKey, refreshBudget]);
+
+  // A new Vancouver day brings new votes. Check every minute and whenever the tab comes back.
+  const voteDate = voteBudget?.voteDate;
+  useEffect(() => {
+    if (!voteDate) return;
+    const check = () => {
+      if (document.visibilityState !== "visible" || vancouverToday() === voteDate) return;
+      setVoteLimitHit(false);
+      refreshBudget();
+    };
+    const timer = setInterval(check, 60 * 1000);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, [voteDate, refreshBudget]);
 
   const reload = useCallback(() => {
     setEvents({});
@@ -107,15 +145,27 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
         setIssues((prev) => ({ ...prev, items: prev.items?.map((i) => (i.issue_id === issueId ? { ...i, my_vote: v } : i)) }));
       const n = tap(`vote:${issueId}`);
       apply(value);
+      setVoteLimitHit(false);
+      const seq = ++budgetSeq.current;
       return setVote(issueId, value).then(
-        () => true,
-        () => {
+        (budget) => {
+          if (isBudget(budget) && seq === budgetSeq.current) setVoteBudget(budget);
+          return true;
+        },
+        (e: unknown) => {
+          if (e instanceof ApiError && e.status === 429) {
+            setVoteLimitHit(true);
+            // the API sends the budget with the 429; if something else sent it, we still know none are left
+            if (isBudget(e.body)) {
+              if (seq === budgetSeq.current) setVoteBudget(e.body);
+            } else setVoteBudget((prev) => (prev ? { ...prev, votesRemaining: 0 } : prev));
+          } else if (seq === budgetSeq.current) refreshBudget();
           if (lastTap.current[`vote:${issueId}`] === n) apply(before);
           return false;
         },
       );
     },
-    [issues.items],
+    [issues.items, refreshBudget],
   );
 
   const setGoing = useCallback((eventId: string, on: boolean) => {
@@ -150,11 +200,12 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(() => {
     setSignInPrompt(null);
     login();
-    if (!USE_MOCK) return;
+    if (!USE_MOCK) return; // Auth0 leaves the page; the budget loads when it comes back
+    refreshBudget();
     const action = pending.current;
     pending.current = null;
     action?.();
-  }, [login]);
+  }, [login, refreshBudget]);
   const cancelSignIn = useCallback(() => {
     pending.current = null;
     setSignInPrompt(null);
@@ -163,6 +214,9 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
   // Auth0 logout reloads the page, which does the same.
   const signOut = useCallback(() => {
     logout();
+    budgetSeq.current++; // drop any budget still on its way for the old account
+    setVoteBudget(null);
+    setVoteLimitHit(false);
     setIssues((prev) => ({ ...prev, items: prev.items?.map((i) => ({ ...i, my_vote: 0 })) }));
     setEvents((prev) => ({ ...prev, items: prev.items?.map((e) => ({ ...e, going: false })) }));
   }, [logout]);
@@ -190,6 +244,9 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
         getScroll,
         saveScroll,
         setMyVote,
+        voteBudget,
+        voteLimitHit,
+        outOfVotes: signedIn && voteBudget?.votesRemaining === 0,
         setGoing,
         signedIn,
         requireSignIn,
