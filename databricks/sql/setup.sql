@@ -24,3 +24,23 @@ CREATE TABLE IF NOT EXISTS bbb.gold.track_overrides (
   track STRING NOT NULL,
   note STRING
 ) COMMENT 'Manual corrections to the AI track for a 311 request type';
+
+-- Seed overrides: Track 1 picks from ai_classify (checked 2026-11-07) that volunteers shouldn't do.
+-- MERGE so re-running setup updates these rows and leaves any rows added by hand alone.
+MERGE INTO bbb.gold.track_overrides t
+USING (VALUES
+  ('Feces Clean Up Case',                                'city', 'health hazard, needs City crews'),
+  ('Abandoned Mattress Case',                            'city', 'bulky item, needs a City pickup'),
+  ('Abandoned Non-Recyclables-Large Case',               'city', 'bulky items, needs a City pickup'),
+  ('Street Litter Can Case',                             'city', 'City empties and fixes litter cans'),
+  ('Park Litter Can Case',                               'city', 'City empties and fixes litter cans'),
+  ('Street Furniture Litter Can Maintenance Case',       'city', 'City maintenance'),
+  ('New Litter Can Request Case',                        'city', 'request for the City to install a can'),
+  ('Graffiti Removal - Private Property Case',           'none', 'property owner must remove it'),
+  ('Graffiti Removal - Commercial Waste Container Case', 'none', 'bin owner must remove it'),
+  ('Graffiti Management Program Case',                   'none', 'program inquiry, not a place'),
+  ('Adopt a Catch Basin Program Inquiry Case',           'none', 'program inquiry, not a place')
+) AS s(request_type, track, note)
+ON t.request_type = s.request_type
+WHEN MATCHED THEN UPDATE SET track = s.track, note = s.note
+WHEN NOT MATCHED THEN INSERT (request_type, track, note) VALUES (s.request_type, s.track, s.note);

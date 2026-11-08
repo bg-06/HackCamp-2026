@@ -538,6 +538,10 @@ FROM (SELECT DISTINCT request_type FROM bbb.silver.t311_cases_current);
 
 -- About 256 request types: check the AI's track by hand and fix mistakes in a small override table
 -- (bbb.gold.track_overrides: request_type, track). The Track 1 list should be short, roughly 20 to 30 types.
+-- Seeded in databricks/sql/setup.sql (checked 2026-11-07): the AI put 22 types in Track 1, and 11 are moved out
+-- (feces cleanup, mattresses, large items and litter cans -> city; private-property graffiti and program inquiries -> none).
+-- That leaves small dumping, recyclables, graffiti on City and park property, street debris, loose litter and sign cleaning.
+-- ai_classify can answer differently between runs, so the overrides also keep the track stable.
 CREATE OR REFRESH MATERIALIZED VIEW bbb.gold.cases_enriched AS
 SELECT c.*, t.category, coalesce(o.track, t.ai_track) AS track,
        datediff(c.closed_on, to_date(c.opened_at)) AS resolution_days
