@@ -233,7 +233,7 @@ Ranked by how much the team wants each prize (lower total = more wanted), and wh
 | 4 | Maritime | An AI agent deployed on Maritime, with a short demo | **Block Steward agent** in a Maritime Agent Box: spots recurring hotspots with nothing planned, suggests events to nearby orgs, posts weekly "ways to help" briefings |
 | 5 | Tailscale | Awarded through superlatives | Opt into **Community Impact** (impact statement) and **Best Design** (Figma link). nwChoice is automatic |
 | 6 | ElevenLabs | Only through Overall Winner / Beginner Overall prize packages | Aim for Overall. Optional stretch: spoken neighbourhood briefings for accessibility |
-| 7 | n8n | Creative n8n automation | n8n is the notification layer: new events to people following an area, new hotspots to nearby orgs, and the refresh after an event is marked done |
+| 7 | n8n (optional) | Creative n8n automation | Optional notifications: new events to people following an area and new hotspots to nearby orgs. Databricks handles event-impact refresh natively |
 | 8+ | Gemini | MLH swag | Used as the agent's model since it's free. Opt in, no extra work |
 | Drop | Solana, Vultr, Tiger Data, Entire, GoDaddy | | Not worth the time |
 
@@ -258,10 +258,9 @@ flowchart LR
     D --> E[Gold<br/>tracks, help hotspots, Track 2 issues,<br/>vote ranking, event impact, summaries]
     E --> M[AI/BI dashboard + Genie]
     E -->|publish_gold task| P[(Postgres<br/>app tables + gold_* tables)]
-    P -->|events, votes via Unity Catalog| D
-    P <--> F[Next.js app on Vercel<br/>pages + API routes]
-    F -->|event published / done webhook| N[n8n]
-    N -->|Jobs API| R[Databricks: refresh ranking + impact]
+    P -->|events, votes via Unity Catalog| R[Databricks: refresh ranking + impact<br/>every 15 minutes]
+    P <--> F[React frontend + Express API]
+    F -->|optional event notifications| N[n8n]
     R --> E
     S[Maritime Agent Box<br/>Block Steward] -->|Auth0 M2M token| F
     S -->|SQL API| E
@@ -274,7 +273,7 @@ In plain words:
 - Gold tables find recurring Track 1 hotspots, group open Track 2 cases into issues people can vote on, rank them, and measure 311 reports before and after each event
 - Gold tables are copied back into Postgres (`gold_*` tables) at the end of each job run. The Next.js app reads them from Postgres for the map, area pages and vote page
 - Residents sign in with Auth0. Everything they create (events, RSVPs, votes, comments, photos) is written to Postgres, and Databricks reads it back through Unity Catalog
-- n8n tells people about new events in areas they follow, tells nearby orgs about new hotspots, and triggers a refresh when an event is marked done
+- Databricks refreshes app vote rankings and event impact every 15 minutes. Optional n8n workflows notify people about new events and nearby orgs about hotspots
 - The Block Steward agent on Maritime looks for recurring hotspots with nothing planned, suggests events to nearby orgs, and posts weekly "ways to help" briefings on area pages
 - Every service-to-service call carries an Auth0 access token with specific scopes
 
@@ -291,7 +290,7 @@ In plain words:
 | Photo storage | Vercel Blob (free tier), URL stored in Postgres |
 | Map | MapLibre GL JS with free OpenFreeMap tiles, deck.gl `H3HexagonLayer` via `@deck.gl/mapbox` interleaved overlay |
 | Agent | Maritime Agent Box running a small Python agent, Gemini as the model |
-| Automation | n8n Cloud (or self-hosted in the Maritime box if Cloud trial is an issue) |
+| Automation | Native Databricks Jobs for ranking/impact refresh; optional n8n for notifications |
 | Service auth | Auth0 API with client-credentials (M2M) apps and scopes, Auth0 RBAC roles for org admins and moderators |
 | Build tool | Freebuff CLI as the coding agent for everyone |
 | Design | Figma for the Best Design submission |
@@ -733,25 +732,31 @@ Honest limit: new app data reaches the gold tables only after a job run (pipelin
 
 ### 5.8 Orchestration
 
-One Lakeflow Job:
+**Current implementation:** `bbb_daily` runs incremental ingest → pipeline → freeze
+type labels → rankings → summaries → publish at 06:00 Vancouver. A second native
+Databricks schedule runs `bbb_refresh_rankings` (rankings → publish) every 15 minutes
+to pick up app votes and completed events from Postgres. n8n is optional, not required
+for this refresh. See `databricks/README.md` for operational commands and verification.
+
+Two native Lakeflow Jobs:
 
 ```
-fetch_311 (City API → Postgres) ──► if landed > 0 ──► pipeline_refresh ──► publish_gold (gold → Postgres) ──► area_summaries (Mondays or manual)
-refresh_rankings  (issue_priority + event_impact, then publish_gold; triggered by n8n when an event is marked done, and nightly)
+bbb_daily: ingest_311 → pipeline_refresh → freeze_type_labels → refresh_rankings → area_summaries → publish_gold
+bbb_refresh_rankings: refresh_rankings → publish_gold (every 15 minutes, or manual for the demo)
 ```
 
 Store the job and pipeline in a Databricks Asset Bundle (`databricks.yml`) in the repo so judges can see it's reproducible.
 
-**Built:** `databricks/databricks.yml` defines `bbb_daily` (`pipeline_refresh` → `refresh_rankings` → `area_summaries` → `publish_gold`, 06:00 Vancouver, paused until the first good manual run) and `bbb_refresh_rankings` (`refresh_rankings` → `publish_gold`) for n8n. The summary model is the bundle variable `summary_endpoint` (default `databricks-meta-llama-3-3-70b-instruct`).
+**Built:** `databricks/databricks.yml` defines both schedules in `America/Vancouver`, explicitly enabled. The daily and fast jobs have passed manual validation. The summary model is the bundle variable `summary_endpoint` (default `databricks-meta-llama-3-3-70b-instruct`).
 
-Order to bring it up:
+Current bring-up and verification order (do not repeat the old streaming-table migration):
 
-1. Teammate loads `raw_311_requests` into Postgres
-2. Turn on SSL on the Postgres server
-3. `python databricks/setup/setup_postgres.py`, then check `SHOW TABLES IN bbb_app.public`
-4. `cd databricks && databricks bundle deploy`
-5. `databricks bundle run t311_pipeline --full-refresh-all` (once, to replace the old streaming tables)
-6. `databricks bundle run bbb_daily`, check the `gold_*` tables in Postgres, then unpause the schedule
+1. App/ingest owner applies the Postgres migrations and loads history (already done).
+2. Confirm existing secrets, SSL connectivity and `bbb_app` federation. Setup is only needed for a new environment.
+3. `cd databricks`, then `databricks bundle validate` and `databricks bundle deploy`.
+4. Run `databricks bundle run bbb_daily` when validating pipeline/publisher changes and compare gold counts and publication timestamps.
+5. Read back both remote job schedules and confirm they are enabled.
+6. After the app can complete an event, verify its next fast refresh with `databricks/operations/verify_event_impact.py`.
 
 ### 5.9 Demo surface for the Databricks judges
 
@@ -780,7 +785,7 @@ How each piece is built, kept as simple as possible:
 | City data | Read from the `gold_*` tables (section 5.7). The vote page joins `gold_track2_issues` with `votes` for a live score. No caching layer needed |
 | Event chat | A `comments` table per event, refreshed every 10 seconds on the event page. No real-time service; it's enough for a demo and much less to build |
 | Photos | Upload to Vercel Blob from an API route, strip metadata first, save the URL in Postgres |
-| Webhooks | API route calls the n8n webhook after an event is published or marked done |
+| Webhooks | Optional n8n webhook after an event is published for notifications. Event-impact refresh uses the native Databricks schedule |
 | Agent endpoints | `/api/agent/*` routes, protected by Auth0 M2M tokens (section 7) |
 
 Lean on a component library (shadcn/ui) so the UI looks consistent with little effort; the Figma file drives colours and layout for Best Design.
@@ -857,7 +862,7 @@ Record a 30-second clip of the agent waking, finding a hotspot with nothing plan
 **n8n workflows** (keep them visible and named well, judges will look at the canvas):
 
 - *New event*: app webhook when an event is published → get Auth0 token → read who follows that area (`notifications:read`) → email them or post in a Discord channel
-- *Event done*: app webhook when a host marks an event done → call Jobs API `run-now` for `refresh_rankings` → the before and after shows up on the hotspot once it finishes
+- *Event done*: no n8n workflow is required. The app commits completion to Postgres; native `bbb_refresh_rankings` refreshes impact every 15 minutes. A manual Databricks run can refresh it immediately during the demo
 - *Hotspot alert for orgs*: daily → query new Track 1 hotspots from Databricks → email org admins whose area it's in
 - Optional: weekly digest per area (upcoming events and top Track 2 issues), and a moderation queue that emails moderators about pending org claims
 
@@ -943,7 +948,7 @@ Everyone uses Freebuff.
 - P2: vote page with live score, mark event done with photo, event chat (comments with polling)
 - P3: weekly briefing posts onto the area page
 - P1: `issue_priority`, `event_impact`, AI/BI dashboard and Genie space; find a real past before and after example
-- P4: *Event done* and *Hotspot alert for orgs* workflows, impact statement draft
+- P4: optional *Hotspot alert for orgs* workflow, impact statement draft; coordinate verification of native event-impact refresh with P1/P2
 
 **Hours 16 to 20: polish**
 - Design pass using the Figma, mobile layout, empty and error states
@@ -1021,7 +1026,7 @@ Flow:
 1. On `/events/:id/done`, the host uploads the after photo (and the before photo, if they didn't add one when creating the event)
 2. A Next.js API route sends both images to Gemini and gets back JSON: whether the after photo shows a cleaned-up public space, a one-line summary of what was done, and a rough count of bags
 3. The form shows the suggestion as editable fields; the host confirms or changes it. Never save the AI's guess without confirmation
-4. The event is saved as done; n8n triggers `refresh_rankings` as usual
+4. The event is saved as done; the next native Databricks rankings refresh includes it (or run the fast job manually for an immediate demo refresh)
 
 Why Gemini and not Databricks for this step: the host is waiting on the form, so the answer needs to come back in a second or two. A Databricks job or a cold SQL warehouse is too slow for that.
 
