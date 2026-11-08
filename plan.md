@@ -733,6 +733,12 @@ Honest limit: new app data reaches the gold tables only after a job run (pipelin
 
 ### 5.8 Orchestration
 
+**Current implementation:** `bbb_daily` runs incremental ingest → pipeline → freeze
+type labels → rankings → summaries → publish at 06:00 Vancouver. A second native
+Databricks schedule runs `bbb_refresh_rankings` (rankings → publish) every 15 minutes
+to pick up app votes and completed events from Postgres. n8n is optional, not required
+for this refresh. See `databricks/README.md` for operational commands and verification.
+
 One Lakeflow Job:
 
 ```

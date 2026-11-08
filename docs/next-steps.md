@@ -360,13 +360,19 @@ Plan.md section 7 has the later Auth0 work: roles (`org_admin`, `moderator`) and
 
 ## Step 14: n8n workflows (n8n prize)
 
+**Updated direction:** the Databricks event-impact/vote refresh uses the existing
+`bbb_refresh_rankings` job on a native 15-minute schedule. The app writes completed
+events to Postgres; no n8n event-done webhook is required. See `databricks/README.md`
+and `databricks/operations/verify_event_impact.py`. n8n remains optional for the
+notification workflows and prize entry below.
+
 - **Who:** n8n owner. Plan.md section 9 has the details.
 - **Before you start:** step 11 part 5 is done.
 - **Do:** three workflows; export each as JSON into `n8n/`:
   1. *New event:* webhook from `POST /events` → read who follows that area (`follows`) → email or Discord.
-  2. *Event done:* webhook from `POST /events/:id/done` → Databricks Jobs API `run-now` for job id `427293815798960` (`bbb_refresh_rankings`). Needs a Databricks token from the user.
+  2. *Event done:* handled by the native Databricks schedule. For an immediate demo refresh, run `databricks bundle run bbb_refresh_rankings` from `databricks/`.
   3. *Hotspot alert for orgs:* daily → new rows in `gold_help_hotspots` → email org admins in that area.
-- **Check:** marking an event done starts a run of `bbb_refresh_rankings` in Databricks.
+- **Check for impact:** after marking an event done, the next successful scheduled run publishes its impact row. Run `python databricks/operations/verify_event_impact.py --event-id <id>` to check it.
 
 ---
 
