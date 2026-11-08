@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { getHelpHotspots, getTrack2Issues, getVolunteerEvents, setGoing as saveGoing, setVote } from "../api/client";
+import { getHelpHotspots, getTrack2Issues, getVolunteerEvents, setGoing as saveGoing, setVote, USE_MOCK } from "../api/client";
+import { useAuth } from "./auth";
 import { inVancouver } from "../lib/geo";
 import type { CommentTarget, FeedTab, HelpHotspot, LatLng, SortKey, Track2Issue, VolunteerEvent, Vote } from "../types";
 import { FeedContext, type Loaded, type LocateStatus } from "./feed";
@@ -29,7 +30,13 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
     scrollTop.current[tab] = top;
   }, []);
 
+  const auth = useAuth();
+  // With Auth0, wait until we know who you are, so the lists come with your votes and RSVPs.
+  // (Signing in or out reloads the page, so this changes only once.) Mock sign-in doesn't refetch.
+  const authKey = USE_MOCK ? "mock" : auth.ready ? String(auth.signedIn) : null;
+
   useEffect(() => {
+    if (authKey === null) return;
     let cancelled = false;
     getVolunteerEvents()
       // finished ones drop off the feed (their pages still open from old links)
@@ -44,7 +51,7 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [reloadKey]);
+  }, [reloadKey, authKey]);
 
   const reload = useCallback(() => {
     setEvents({});
@@ -125,10 +132,9 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  // Sign-in. In mock mode "Sign in" just flips this flag.
-  // TODO(auth): with Auth0, signIn() calls loginWithRedirect and keeps the pending action in appState,
-  // since the page reloads after the redirect.
-  const [signedIn, setSignedIn] = useState(false);
+  // Sign-in. Mock mode signs in straight away and then runs what you tapped. Auth0 goes to its login
+  // page and comes back to this page; the tap isn't replayed, since the page reloads.
+  const { signedIn } = auth;
   const [signInPrompt, setSignInPrompt] = useState<string | null>(null);
   const pending = useRef<(() => void) | null>(null);
 
@@ -140,24 +146,26 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
     },
     [signedIn],
   );
+  const { login, logout } = auth;
   const signIn = useCallback(() => {
-    setSignedIn(true);
     setSignInPrompt(null);
+    login();
+    if (!USE_MOCK) return;
     const action = pending.current;
     pending.current = null;
     action?.();
-  }, []);
+  }, [login]);
   const cancelSignIn = useCallback(() => {
     pending.current = null;
     setSignInPrompt(null);
   }, []);
   // Your votes and sign-ups belong to the account, so they go with it.
-  // TODO(auth): Auth0 logout reloads the page, which does the same.
+  // Auth0 logout reloads the page, which does the same.
   const signOut = useCallback(() => {
-    setSignedIn(false);
+    logout();
     setIssues((prev) => ({ ...prev, items: prev.items?.map((i) => ({ ...i, my_vote: 0 })) }));
     setEvents((prev) => ({ ...prev, items: prev.items?.map((e) => ({ ...e, going: false })) }));
-  }, []);
+  }, [logout]);
 
   return (
     <FeedContext.Provider
