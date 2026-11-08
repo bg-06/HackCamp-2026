@@ -11,6 +11,9 @@ function isBudget(x: unknown): x is VoteBudget {
   return typeof x === "object" && x !== null && typeof (x as VoteBudget).votesRemaining === "number";
 }
 
+// Issue rows drawn at a time. Thousands at once froze the page for seconds.
+const ISSUE_PAGE = 50;
+
 function errorText(e: unknown) {
   return e instanceof Error ? e.message : String(e);
 }
@@ -45,6 +48,11 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
   const setSearchOpen = useCallback((tab: FeedTab, open: boolean) => setSearchOpens((prev) => ({ ...prev, [tab]: open })), []);
   const scrollTop = useRef<Record<FeedTab, number>>({ volunteer: 0, issues: 0 });
   const getScroll = useCallback((tab: FeedTab) => scrollTop.current[tab], []);
+  const issueLimit = useRef({ key: "", n: ISSUE_PAGE });
+  const getIssueLimit = useCallback((key: string) => (issueLimit.current.key === key ? issueLimit.current.n : ISSUE_PAGE), []);
+  const saveIssueLimit = useCallback((key: string, n: number) => {
+    issueLimit.current = { key, n };
+  }, []);
   const saveScroll = useCallback((tab: FeedTab, top: number) => {
     scrollTop.current[tab] = top;
   }, []);
@@ -243,6 +251,8 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
         setSearchOpen,
         getScroll,
         saveScroll,
+        getIssueLimit,
+        saveIssueLimit,
         setMyVote,
         voteBudget,
         voteLimitHit,

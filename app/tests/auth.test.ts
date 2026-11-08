@@ -3,7 +3,7 @@ import { before, after, test } from 'node:test'
 import { createServer, type Server } from 'node:http'
 import express from 'express'
 import { createRemoteJWKSet, SignJWT, type JWTPayload, type JWTVerifyGetKey } from 'jose'
-import { createAuthMiddleware, createTokenVerifier, loadAuth0Settings, viewerId, userId } from '../server/auth.js'
+import { createAuthMiddleware, createTokenVerifier, loadAuth0Settings, requireScope, viewerId, userId } from '../server/auth.js'
 import { authFixture, settings } from './auth-fixture.js'
 
 let identity: Awaited<ReturnType<typeof authFixture>>, base: string
@@ -116,6 +116,33 @@ test('machine tokens cannot use resident identity routes', async () => {
   }
 })
 
+test('machine tokens are also refused on public reads, so they never pick up a viewer identity', async () => {
+  const response = await get(await identity.sign('app-id@clients', { gty: 'client-credentials' }), '/events')
+  assert.equal(response.status, 403); await response.arrayBuffer()
+})
+
+test('agent routes need a machine token with the matching scope', async () => {
+  const app = express()
+  app.use(createAuthMiddleware(settings, identity.keys))
+  app.post('/agent/suggestions', (req, res) => { res.json({ client: requireScope(req, 'suggestions:post') }) })
+  app.use((err: { status?: number; message: string }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    res.status(err.status ?? 500).json({ error: err.message })
+  })
+  const url = await listen(createServer(app))
+  const post = async (token?: string) => {
+    const response = await fetch(url + '/agent/suggestions', { method: 'POST',
+      headers: token ? { authorization: `Bearer ${token}` } : {} })
+    return { status: response.status, body: await response.json() }
+  }
+  const machine = (scope?: string) => identity.sign('agent-id@clients', { gty: 'client-credentials', ...(scope ? { scope } : {}) })
+
+  assert.equal((await post()).status, 401)
+  assert.equal((await post(await identity.sign('alice'))).status, 403) // a person can't post as the agent
+  assert.equal((await post(await machine())).status, 403)
+  assert.equal((await post(await machine('briefings:post'))).status, 403)
+  assert.deepEqual(await post(await machine('briefings:post suggestions:post')), { status: 200, body: { client: 'agent-id@clients' } })
+})
+
 test('JWKS fetch failures fail closed and never fall back to a demo user', async () => {
   const url = await appUrl(async () => { throw new TypeError('Simulated JWKS outage') })
   const response = await get(await identity.sign(), '/me/history', url)
@@ -131,7 +158,7 @@ test('remote JWKS are fetched once and cached across verified requests', async (
     res.end(JSON.stringify({ keys: [identity.jwk] }))
   }))
   const verify = createTokenVerifier(settings, createRemoteJWKSet(new URL(jwksUrl)))
-  assert.equal(await verify(await identity.sign('alice')), 'alice')
-  assert.equal(await verify(await identity.sign('bob')), 'bob')
+  assert.deepEqual(await verify(await identity.sign('alice')), { kind: 'resident', sub: 'alice' })
+  assert.deepEqual(await verify(await identity.sign('bob')), { kind: 'resident', sub: 'bob' })
   assert.equal(calls, 1)
 })

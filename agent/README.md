@@ -50,7 +50,7 @@ Suggestion, `POST {AGENT_API_BASE_URL}/agent/suggestions`. `AGENT_API_BASE_URL` 
 
 ## For the app and forum team
 
-The two endpoints **do not exist yet**. Please build them (plan.md section 7 has a route sketch with a singular path; use the exact paths above):
+**Built** in `app/server/api.ts` (migration `007_profiles_and_agent_posts.sql`): suggestions go to `posts` as `pending` rows with `payload` and `dedupe_key`; briefings are `published` and listed at `GET /briefings`. Repeats return 200 with `stored: 0`, so they don't count as failed sends. The Auth0 machine-to-machine app is `block-steward-agent`, authorized for `https://api.blockbyblock` with both scopes; copy its client id and secret into the agent's secrets from the Auth0 dashboard. Showing suggestions to org admins (accept/dismiss) still needs org-admin roles. The original requirements are kept below:
 
 - Verify the Auth0 token (client credentials, audience `https://api.blockbyblock`) and its scope: `suggestions:post` for suggestions, `briefings:post` for briefings.
 - **Where suggestions are stored.** The `posts` table (`app/db/migrations/002_app.sql`) has a single `org_id`, no columns for `event_draft`, `hotspot`, `city_program` or `dedupe_key`, and `status` defaults to `'published'`. So:

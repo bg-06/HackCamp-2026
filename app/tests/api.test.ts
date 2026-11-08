@@ -42,7 +42,7 @@ after(async () => {
 })
 
 beforeEach(async () => {
-  await sql`TRUNCATE vote_casts, vote_daily_usage, votes, comments, rsvps, events,
+  await sql`TRUNCATE profiles, posts, orgs, vote_casts, vote_daily_usage, votes, comments, rsvps, events,
     gold_help_hotspots, gold_track2_issues, gold_type_categories, local_areas CASCADE`
   await sql`INSERT INTO local_areas (name, geom, representative_point, source_record)
     VALUES ('Mount Pleasant', '{}'::jsonb, '{}'::jsonb, '{}'::jsonb)`
@@ -111,7 +111,9 @@ test('event creation trusts hotspot data and atomically RSVPs its host', async (
   assert.equal(result.status, 201)
   assert.equal(result.body.category, 'Garbage and Dumping')
   assert.equal(result.body.hotspotId, hotspotId)
-  assert.equal(result.body.createdBy, 'alice')
+  assert.equal(result.body.hostedByMe, true)
+  assert.equal(result.body.createdBy, undefined) // the host's Auth0 id is never sent
+  assert.equal(result.body.organiser, 'A neighbour')
   assert.equal(result.body.going, true)
   assert.equal(result.body.spotsTaken, 0)
   assert.equal(result.body.sample, false)
@@ -222,4 +224,95 @@ test('budget migration backfills existing upvotes and remains safe to replay wit
   await sql.unsafe(migration)
   assert.equal((await request('/me/votes')).body.votesRemaining, 0)
   assert.equal((await sql`SELECT count(*)::int AS n FROM vote_casts`)[0]!.n, 2)
+})
+
+test('comments and hosted events show display names, never Auth0 ids', async () => {
+  assert.deepEqual((await request('/me/profile')).body, { displayName: null })
+  const anonymous = await request('/issues/issue-1/comments', 'POST', { body: 'First!' }, 'google-oauth2|123')
+  assert.equal(anonymous.body.author, 'Neighbour')
+
+  assert.equal((await request('/me/profile', 'PUT', { displayName: '<b>x</b>' })).status, 400)
+  assert.equal((await request('/me/profile', 'PUT', { displayName: '   ' })).status, 400)
+  assert.equal((await request('/me/profile', 'PUT', { displayName: 'x'.repeat(61) })).status, 400)
+  assert.deepEqual((await request('/me/profile', 'PUT', { displayName: '  Alice   A. ' })).body, { displayName: 'Alice A.' })
+  assert.deepEqual((await request('/me/profile')).body, { displayName: 'Alice A.' })
+
+  const posted = await request('/issues/issue-1/comments', 'POST', { body: 'Still there' })
+  assert.equal(posted.status, 201)
+  assert.equal(posted.body.author, 'Alice A.')
+  const listed = await fetch(base + '/issues/issue-1/comments').then(r => r.json())
+  assert.deepEqual(listed.map((c: { author: string }) => c.author), ['Neighbour', 'Alice A.'])
+  assert.ok(!JSON.stringify(listed).includes('google-oauth2'))
+
+  const created = await request('/events', 'POST', eventInput())
+  assert.equal(created.body.organiser, 'Alice A.')
+  const asBob = await request(`/events/${created.body.id}`, 'GET', undefined, 'bob')
+  assert.equal(asBob.body.hostedByMe, false)
+  assert.equal(asBob.body.organiser, 'Alice A.')
+  const anon = await fetch(base + `/events/${created.body.id}`).then(r => r.json())
+  assert.equal(anon.hostedByMe, false)
+  assert.ok(!JSON.stringify(anon).includes('alice'))
+  // a later rename shows on events already hosted
+  await request('/me/profile', 'PUT', { displayName: 'Ali' })
+  assert.equal((await request(`/events/${created.body.id}`)).body.organiser, 'Ali')
+})
+
+async function agentPost(path: string, body: unknown, scope = 'suggestions:post briefings:post') {
+  const token = await identity.sign('agent-client@clients', { gty: 'client-credentials', scope })
+  const response = await fetch(base + path, { method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify(body) })
+  return { status: response.status, body: await response.json() }
+}
+
+function suggestion(overrides: Record<string, unknown> = {}) {
+  return { kind: 'suggestion', author: 'block-steward-agent', local_area: 'Mount Pleasant', org_ids: [],
+    title: 'Litter keeps coming back on Main', body: 'Para one.\n\n- point', city_program: null,
+    hotspot: { h3_r9: cell, request_type: 'Loose Litter Clean Up Case', category: 'Garbage and Dumping',
+      times_reported: 12, months_seen: 4, last_reported: '2026-11-05T10:00:00-08:00' },
+    event_draft: { kind: 'hotspot', title: 'Main St cleanup', category: 'Garbage and Dumping', local_area: 'Mount Pleasant',
+      latitude: 49.26, longitude: -123.1, hotspot_id: `${cell}:Loose Litter Clean Up Case`, what_to_bring: 'Gloves', signup_url: null },
+    dedupe_key: `suggestion:${cell}:Loose Litter Clean Up Case:2026-W45`, ...overrides }
+}
+
+test('agent suggestions need the suggestions scope and are stored pending, once per org', async () => {
+  assert.equal((await agentPost('/agent/suggestions', suggestion(), 'briefings:post')).status, 403)
+  assert.equal((await request('/agent/suggestions', 'POST', suggestion())).status, 403) // resident token
+  assert.equal((await agentPost('/agent/suggestions', { ...suggestion(), kind: 'briefing' })).status, 400)
+  assert.equal((await agentPost('/agent/suggestions', suggestion({ org_ids: ['nope'] }))).status, 400)
+  assert.equal((await sql`SELECT count(*)::int AS n FROM posts`)[0]!.n, 0)
+
+  await sql`INSERT INTO orgs (id, name, local_area) VALUES ('org-a', 'Garden A', 'Mount Pleasant'), ('org-b', 'Centre B', 'Mount Pleasant')`
+  assert.deepEqual(await agentPost('/agent/suggestions', suggestion({ org_ids: ['org-a', 'org-b'] })), { status: 201, body: { stored: 2, skipped: 0 } })
+  const rows = await sql`SELECT org_id, status, author, hotspot_id, payload FROM posts ORDER BY org_id`
+  assert.deepEqual(rows.map(r => [r.org_id, r.status, r.author]), [['org-a', 'pending', 'block-steward-agent'], ['org-b', 'pending', 'block-steward-agent']])
+  assert.equal(rows[0]!.hotspot_id, hotspotId) // normalised to the app's "<h3>|<type>"
+  assert.equal(rows[0]!.payload.event_draft.what_to_bring, 'Gloves')
+
+  // a retry the same week, and next week's suggestion for the same hotspot, are both skipped with 200
+  const week46 = `suggestion:${cell}:Loose Litter Clean Up Case:2026-W46`
+  assert.deepEqual(await agentPost('/agent/suggestions', suggestion({ org_ids: ['org-a', 'org-b'] })), { status: 200, body: { stored: 0, skipped: 2 } })
+  assert.deepEqual(await agentPost('/agent/suggestions', suggestion({ org_ids: ['org-a'], dedupe_key: week46 })), { status: 200, body: { stored: 0, skipped: 1 } })
+  // dismissed still blocks; accepted does not
+  await sql`UPDATE posts SET status = 'accepted' WHERE org_id = 'org-b'`
+  assert.deepEqual(await agentPost('/agent/suggestions', suggestion({ org_ids: ['org-b'], dedupe_key: week46 })), { status: 201, body: { stored: 1, skipped: 0 } })
+  // no orgs: one area-wide row
+  assert.deepEqual(await agentPost('/agent/suggestions', suggestion()), { status: 201, body: { stored: 1, skipped: 0 } })
+})
+
+test('agent briefings are published once per dedupe key and listed publicly as plain data', async () => {
+  const briefing = { kind: 'briefing', author: 'block-steward-agent', local_area: 'Mount Pleasant', title: 'This week in Mount Pleasant',
+    body: 'Ways to help.\n\n- Main St', week_of: '2026-11-09', model: 'template', dedupe_key: 'briefing:Mount Pleasant:2026-11-09' }
+  assert.equal((await agentPost('/agent/briefings', briefing, 'suggestions:post')).status, 403)
+  assert.equal((await agentPost('/agent/briefings', { ...briefing, week_of: 'soon' })).status, 400)
+  assert.deepEqual(await agentPost('/agent/briefings', briefing), { status: 201, body: { stored: 1, skipped: 0 } })
+  assert.deepEqual(await agentPost('/agent/briefings', briefing), { status: 200, body: { stored: 0, skipped: 1 } })
+  const listed = await fetch(base + '/briefings?area=Mount%20Pleasant').then(r => r.json())
+  assert.equal(listed.length, 1)
+  assert.equal(listed[0].weekOf, '2026-11-09')
+  assert.equal(listed[0].body, briefing.body)
+  assert.deepEqual(await fetch(base + '/briefings?area=Elsewhere').then(r => r.json()), [])
+  // machine tokens can't use resident routes, even public reads
+  const token = await identity.sign('agent-client@clients', { gty: 'client-credentials', scope: 'briefings:post' })
+  const refused = await fetch(base + '/briefings', { headers: { authorization: `Bearer ${token}` } })
+  assert.equal(refused.status, 403); await refused.arrayBuffer()
 })

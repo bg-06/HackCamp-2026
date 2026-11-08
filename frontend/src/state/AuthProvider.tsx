@@ -1,8 +1,8 @@
 import { Auth0Provider, useAuth0, type AppState } from "@auth0/auth0-react";
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { setAccessTokenGetter, USE_MOCK } from "../api/client";
-import { AuthContext, type Auth } from "./auth";
+import { saveDisplayName, setAccessTokenGetter, USE_MOCK } from "../api/client";
+import { AuthContext, publicName, type Auth } from "./auth";
 
 const DOMAIN = import.meta.env.VITE_AUTH0_DOMAIN;
 const CLIENT_ID = import.meta.env.VITE_AUTH0_CLIENT_ID;
@@ -43,6 +43,12 @@ function Auth0Bridge({ children }: { children: ReactNode }) {
   // Set during render, not in an effect: FeedProvider's first fetch runs in an effect below this
   // component, and child effects run before parent ones.
   setAccessTokenGetter(isAuthenticated ? () => getAccessTokenSilently() : null);
+
+  // Keep the API's display name in step with the Auth0 profile, once per sign-in or name change.
+  const displayName = isAuthenticated ? publicName(user) : null;
+  useEffect(() => {
+    if (displayName) saveDisplayName(displayName).catch(() => {}); // comments fall back to "Neighbour"
+  }, [displayName]);
 
   const login = useCallback(() => {
     // Come back to the page they were on. What they tapped isn't replayed, since the page reloads.
