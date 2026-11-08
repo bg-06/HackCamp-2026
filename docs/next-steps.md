@@ -376,7 +376,7 @@ Plan.md section 7 has the later Auth0 work: roles (`org_admin`, `moderator`) and
 - **Before you start:** step 3 is done (all 311 data loaded) and step 5 is merged.
 - **Do:**
   1. Remove the table creation from `databricks/notebooks/publish_gold.py` (the `DDL_PATH` part), since step 5 made the ingest create the `gold_*` tables.
-  2. Run `bbb_daily` (`cd databricks && databricks bundle run bbb_daily`) and check the `gold_*` tables in Postgres hold data for all of Vancouver.
+  2. Run `bbb_daily` (`cd databricks && databricks bundle run bbb_daily`) and check the `gold_*` tables in Postgres hold data for all of Vancouver. (First full run done 2026-11-08 after the full 311 load: `gold_track2_issues` 3,846, `gold_hotspots_h3` 1,211, `gold_help_hotspots` 1,634, `gold_type_categories` 256, `gold_area_summaries` 22. Run it again after item 1.)
   3. Unpause the `bbb_daily` schedule.
   4. Re-check the Track 1 request types against the full data, and build the AI/BI dashboard and Genie space by following `databricks/dashboards/README.md` and `databricks/genie/instructions.md`.
 
