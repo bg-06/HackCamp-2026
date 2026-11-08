@@ -50,7 +50,7 @@ export default function VolunteerPage() {
   const goBack = () => (location.key !== "default" ? navigate(-1) : navigate("/"));
 
   return (
-    <div className="page light">
+    <div className="page place">
       <main className="page-content flush">
         {!event && <DetailHero title="" place="" onBack={goBack} />}
         {event === undefined && !error && <div className="skeleton detail-pad" style={{ height: 320 }} aria-busy="true" />}

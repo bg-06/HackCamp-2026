@@ -23,7 +23,7 @@ export default function EventTile({ event, ratio, distanceKm }: Props) {
 
   return (
     <Link className="tile" to={`/volunteer/${encodeURIComponent(event.id)}`}>
-      <div className="tile-cover" style={{ aspectRatio: `1 / ${ratio}`, background: style.bg, color: style.fg }}>
+      <div className={`tile-cover ${event.photoUrl ? "" : "no-photo"}`} style={{ aspectRatio: `1 / ${ratio}`, background: style.bg, color: style.fg }}>
         {event.photoUrl ? <img src={event.photoUrl} alt="" loading="lazy" /> : <Icon size={44} strokeWidth={1.3} aria-hidden="true" />}
         <span className="tile-caption">
           {when} · {where}

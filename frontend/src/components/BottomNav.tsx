@@ -8,10 +8,6 @@ const ITEMS = [
   { to: '/me', label: 'Me', icon: CircleUser },
 ]
 
-// Detail pages and the profile use the light theme, so the bar goes light with them.
-const isLightRoute = (pathname: string) =>
-  pathname === '/me' || pathname.startsWith('/issues/') || (pathname.startsWith('/volunteer/') && pathname !== '/volunteer/new')
-
 export default function BottomNav() {
   const { pathname } = useLocation()
   // Detail pages count as their tab. Plain Link, because NavLink would set its own aria-current.
@@ -21,7 +17,7 @@ export default function BottomNav() {
       : pathname.startsWith(to)
 
   return (
-    <nav className={`bottom-nav ${isLightRoute(pathname) ? 'light' : ''}`} aria-label="Main">
+    <nav className="bottom-nav" aria-label="Main">
       {ITEMS.map(({ to, label, icon: Icon, primary }) =>
         primary ? (
           <Link key={to} to={to} className="nav-plus-wrap" aria-label={label} aria-current={isActive(to) ? 'page' : undefined}>

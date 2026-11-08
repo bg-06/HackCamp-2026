@@ -1,8 +1,24 @@
-import { Bookmark, CalendarDays, ChevronRight, CircleCheck, Clock, HeartHandshake, LogIn, LogOut, MapPin, TriangleAlert, Trophy } from "lucide-react";
+import {
+  Bookmark,
+  CalendarDays,
+  ChevronRight,
+  CircleCheck,
+  Clock,
+  HeartHandshake,
+  LogIn,
+  LogOut,
+  MapPin,
+  Moon,
+  SunMedium,
+  SunMoon,
+  TriangleAlert,
+  Trophy,
+} from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { getMyHistory, USE_MOCK } from "../api/client";
 import { downloadHoursRecord, formatDay, formatHours } from "../lib/hours";
+import { useThemePref, type ThemePref } from "../lib/theme";
 import { useAuth } from "../state/auth";
 import { useFeed } from "../state/feed";
 import type { VolunteerRecord } from "../types";
@@ -10,6 +26,12 @@ import type { VolunteerRecord } from "../types";
 const TZ = "America/Vancouver";
 
 type Section = "upcoming" | "votes" | "hours";
+
+const THEMES: { key: ThemePref; label: string; icon: ReactNode }[] = [
+  { key: "system", label: "Auto", icon: <SunMoon size={16} aria-hidden="true" /> },
+  { key: "light", label: "Light", icon: <SunMedium size={16} aria-hidden="true" /> },
+  { key: "dark", label: "Dark", icon: <Moon size={16} aria-hidden="true" /> },
+];
 
 // One tappable row (icon, label, count, chevron) that opens its list under it.
 function ListRow(props: { icon: ReactNode; label: string; count: ReactNode; open: boolean; onToggle: () => void; children: ReactNode }) {
@@ -34,6 +56,7 @@ export default function ProfilePage() {
   const [historyError, setHistoryError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [open, setOpen] = useState<Section | null>(null);
+  const [theme, setTheme] = useThemePref();
 
   useEffect(() => {
     if (!signedIn) return;
@@ -65,7 +88,7 @@ export default function ProfilePage() {
     : "?";
 
   return (
-    <div className="page light">
+    <div className="page place">
       <header className="profile-bar">
         <h1>{displayName}</h1>
         <button className="icon-button plain" onClick={signedIn ? signOut : signIn} disabled={!ready} aria-label={signedIn ? "Sign out" : "Sign in"}>
@@ -117,6 +140,15 @@ export default function ProfilePage() {
           </button>
         </div>
         {USE_MOCK && <p className="muted small center">Sample sign-in for now, no real account.</p>}
+
+        <div className="theme-switch" role="group" aria-label="Appearance">
+          {THEMES.map(({ key, label, icon }) => (
+            <button key={key} aria-pressed={theme === key} onClick={() => setTheme(key)}>
+              {icon}
+              {label}
+            </button>
+          ))}
+        </div>
 
         {!ready ? null : !signedIn ? (
           <p className="muted center">Sign in to see what you've signed up for, your votes and your volunteer hours.</p>

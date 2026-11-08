@@ -57,7 +57,7 @@ export default function IssuePage() {
   const goBack = () => (location.key !== "default" ? navigate(-1) : navigate("/issues"));
 
   return (
-    <div className="page light">
+    <div className="page place">
       <main className="page-content flush">
         {!issue && <DetailHero title="" place="" onBack={goBack} />}
         {issue === undefined && !error && <div className="skeleton detail-pad" style={{ height: 280 }} aria-busy="true" />}
