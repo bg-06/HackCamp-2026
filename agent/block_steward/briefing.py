@@ -10,6 +10,7 @@ import re
 from collections import Counter
 from datetime import date, timedelta
 
+from .programs import is_graffiti
 from .timeutil import as_date
 from .wording import plain_words
 
@@ -95,6 +96,9 @@ def _template(area, f) -> str:
     if f["events"]:
         p3 = (f"One way to help: join {f['events'][0]['title']} on "
               f"{_day(f['events'][0]['starts_at'])}, and bring a neighbour.")
+    elif f["hotspot_types"] and is_graffiti({"request_type": f["hotspot_types"][0][0]}):
+        p3 = ("One way to help: organise a short neighbourhood walk this week to spot "
+              "new tags and report them in Van311.")
     elif f["hotspot_types"]:
         p3 = (f"One way to help: pick one spot with {plain_words(f['hotspot_types'][0][0])} "
               "and organise a short neighbourhood walk to tidy it up and report anything new in Van311.")
@@ -134,6 +138,7 @@ def _prompt(area, f) -> str:
         f"Write a friendly plain-text post of at most {MAX_WORDS} words, using only the facts below.\n"
         "Rules: no Markdown, no HTML, no headings, no lists with symbols; do not invent any "
         "names, numbers, places or events; use Canadian spelling (neighbour, organise); "
+        "for graffiti, suggest spotting and reporting it in Van311, never removing, cleaning or painting over it; "
         "end with one concrete way to help.\n\n"
         f"FACTS:\n{facts}\n"
     )

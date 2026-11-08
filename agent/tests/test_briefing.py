@@ -100,6 +100,23 @@ def test_no_events_no_summary_reads_well():
     assert "oose litter" in body
 
 
+def test_graffiti_way_to_help_spots_and_reports():
+    g = [hot("Graffiti Removal - City Property Case")]
+    body = build_briefing("Mount Pleasant", None, [], [], g, TODAY)["body"]
+    p3 = body.split("\n\n")[2]
+    assert "Van311" in p3 and "report" in p3
+    for word in ("tidy", "clean", "remove", "paint"):
+        assert word not in p3.lower()
+    litter = build_briefing("Mount Pleasant", None, [], [], [hot()], TODAY)["body"]
+    assert "tidy it up" in litter.split("\n\n")[2]
+
+
+def test_prompt_graffiti_rule():
+    seen = []
+    full(lambda p: seen.append(p) or "ok")
+    assert "never removing" in seen[0]
+
+
 def test_nothing_at_all():
     body = build_briefing("Mount Pleasant", None, [], [], [], TODAY)["body"]
     assert len(body.split("\n\n")) == 3
