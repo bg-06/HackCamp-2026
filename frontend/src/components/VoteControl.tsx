@@ -8,10 +8,10 @@ interface Props {
   compact?: boolean // in a feed card: no labels under the buttons
 }
 
-/** ▲ score ▼. Tapping your current vote again clears it. */
 export default function VoteControl({ issue, onVote, compact }: Props) {
   const { up, down, score } = issueScore(issue)
   const title = issue.request_type.replace(/ Case$/, '')
+  // tapping your current vote again clears it
   const vote = (value: 1 | -1) => onVote(issue.issue_id, issue.my_vote === value ? 0 : value)
 
   return (

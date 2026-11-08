@@ -15,19 +15,28 @@ const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Give up after 15 s so a stuck request shows "Try again" instead of loading forever
+const TIMEOUT_MS = 15000;
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
     ...init,
+    // merged, so adding an Authorization header later doesn't drop the content type
+    headers: { "Content-Type": "application/json", ...init?.headers },
   });
   if (!res.ok) throw new Error(`Request failed (${res.status})`);
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
+  // A 200/201 with an empty body is still a success (common for PUT and POST)
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 /** Like request(), but a 404 means "doesn't exist" and returns null instead of throwing. */
 async function requestOrNull<T>(path: string): Promise<T | null> {
-  const res = await fetch(`${API_BASE}${path}`, { headers: { "Content-Type": "application/json" } });
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Request failed (${res.status})`);
   return res.json() as Promise<T>;
@@ -102,8 +111,8 @@ const commentsPath = (type: CommentTarget, id: string) =>
 export async function getComments(type: CommentTarget, id: string): Promise<Comment[]> {
   if (USE_MOCK) {
     await wait(200);
-    return COMMENTS.filter((c) => c.targetType === type && c.targetId === id).sort((a, b) =>
-      a.createdAt.localeCompare(b.createdAt),
+    return COMMENTS.filter((c) => c.targetType === type && c.targetId === id).sort(
+      (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt), // not string order: offsets differ
     );
   }
   // TODO(backend): GET /events/:id/comments or /issues/:id/comments, from the `comments` table, oldest first.
@@ -114,7 +123,7 @@ export async function getComments(type: CommentTarget, id: string): Promise<Comm
 export async function addComment(type: CommentTarget, id: string, body: string): Promise<Comment> {
   if (USE_MOCK) {
     await wait(200);
-    const c: Comment = { id: `local-${Date.now()}`, targetType: type, targetId: id, body, ...MOCK_ME, createdAt: new Date().toISOString() };
+    const c: Comment = { id: `local-${COMMENTS.length}-${Date.now()}`, targetType: type, targetId: id, body, ...MOCK_ME, createdAt: new Date().toISOString() };
     COMMENTS.push(c);
     return c;
   }

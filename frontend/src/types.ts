@@ -14,7 +14,7 @@ export interface VolunteerEvent {
   title: string
   organiser: string
   category: string // same category names as the 311 data (see data/categories.ts)
-  startsAt: string // ISO with offset, e.g. 2026-11-15T10:00:00-08:00
+  startsAt: string // ISO with offset, e.g. 2026-11-15T10:00:00-07:00
   endsAt: string
   location: string
   localArea: string
@@ -52,6 +52,7 @@ export interface Track2Issue {
   lat?: number // centre of the H3 cell
   lng?: number
   popularity?: number // how many people searched for or opened it
+  photo_url?: string // a resident's photo of it; 311 data has none
 }
 
 export type Vote = -1 | 0 | 1
@@ -80,4 +81,4 @@ export interface Comment {
   createdAt: string // ISO
 }
 
-export type FeedTab = 'help' | 'fix'
+export type FeedTab = 'volunteer' | 'issues'

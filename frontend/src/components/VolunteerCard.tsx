@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { KIND_LABELS } from '../data/categories'
 import { requestTypeInSentence } from '../lib/cover'
 import type { VolunteerEvent } from '../types'
@@ -18,17 +19,22 @@ function formatWhen(startsAt: string, endsAt: string) {
   return `${day}, ${time(startsAt)}–${time(endsAt)}`
 }
 
-function siteName(url: string) {
+// Orgs will be able to post their own listings, so only plain web links get through
+// (a "javascript:" link here would run on click).
+function safeLink(url?: string) {
   try {
-    return new URL(url).hostname.replace(/^www\./, '')
+    const u = new URL(url ?? '')
+    return u.protocol === 'https:' || u.protocol === 'http:' ? u : null
   } catch {
-    return "the organiser's site"
+    return null
   }
 }
 
-/** The top of a volunteer page: what, who, when, why here, and the one action. */
 export default function VolunteerCard({ event, going, onToggleGoing }: Props) {
+  const [openedAt] = useState(Date.now)
+  const ended = Date.parse(event.endsAt) < openedAt // can still be opened from an old link
   const external = Boolean(event.signupUrl)
+  const link = safeLink(event.signupUrl)
   const total = event.spotsTotal
   const taken = (event.spotsTaken ?? 0) + (going ? 1 : 0)
   const full = total !== undefined && taken >= total && !going
@@ -73,22 +79,31 @@ export default function VolunteerCard({ event, going, onToggleGoing }: Props) {
       )}
 
       <div className="card-action">
-        {external ? (
-          <>
-            <a className="action-button" href={event.signupUrl} target="_blank" rel="noopener noreferrer">
-              Sign up on {siteName(event.signupUrl!)} ↗
-            </a>
-            <p className="muted small">Opens the organiser's site.</p>
-          </>
+        {ended ? (
+          <p className="muted">This one has finished.</p>
+        ) : external ? (
+          link ? (
+            <>
+              <a className="action-button" href={link.href} target="_blank" rel="noopener noreferrer">
+                Sign up on {link.hostname.replace(/^www\./, '')} ↗
+              </a>
+              <p className="muted small">Opens the organiser's site.</p>
+            </>
+          ) : (
+            <p className="muted">Ask the organiser how to sign up.</p>
+          )
         ) : (
-          <button
-            className={`action-button ${going ? 'on' : ''}`}
-            aria-pressed={going}
-            disabled={full}
-            onClick={() => onToggleGoing(event.id)}
-          >
-            {full ? 'Full' : going ? "You're signed up (tap to cancel)" : "I'm in"}
-          </button>
+          <>
+            <button
+              className={`action-button ${going ? 'on' : ''}`}
+              aria-pressed={going}
+              disabled={full}
+              onClick={() => onToggleGoing(event.id)}
+            >
+              {full ? 'Full' : going ? "You're signed up" : "I'm in"}
+            </button>
+            {going && <p className="muted small">Can't make it? Tap again to cancel.</p>}
+          </>
         )}
       </div>
     </article>

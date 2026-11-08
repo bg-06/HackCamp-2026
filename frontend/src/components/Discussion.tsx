@@ -9,7 +9,6 @@ interface Props {
   id: string
 }
 
-/** The discussion under a post: questions, offers to help, updates from the organiser. */
 export default function Discussion({ type, id }: Props) {
   const [comments, setComments] = useState<Comment[] | null>(null)
   const [loadError, setLoadError] = useState(false)
@@ -75,7 +74,7 @@ export default function Discussion({ type, id }: Props) {
               <li key={c.id} className="comment">
                 <p className="comment-meta">
                   <strong>{c.author}</strong>
-                  {badge && <span> · {badge.label}</span>}
+                  {badge && <span> · {badge}</span>}
                   <span> · {formatPosted(c.createdAt)}</span>
                 </p>
                 <p className="comment-body">{c.body}</p>
@@ -85,29 +84,32 @@ export default function Discussion({ type, id }: Props) {
         </ul>
       )}
 
-      <form className="comment-form" onSubmit={submit}>
-        <label className="visually-hidden" htmlFor={`comment-${id}`}>
-          Write a comment
-        </label>
-        <textarea
-          id={`comment-${id}`}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          maxLength={COMMENT_MAX}
-          rows={2}
-          placeholder="Write a comment"
-        />
-        {sendError && (
-          <p className="form-error" role="alert">
-            <TriangleAlert size={16} aria-hidden="true" />
-            Couldn't post your comment. Try again.
-          </p>
-        )}
-        <button className="action-button secondary" type="submit" disabled={sending || !text.trim()}>
-          {sending ? 'Posting…' : 'Post'}
-        </button>
-        <p className="muted small">Comments are public. Don't share anyone's personal details.</p>
-      </form>
+      {/* No form until the list has loaded, so a new comment never looks like the only one */}
+      {comments && (
+        <form className="comment-form" onSubmit={submit}>
+          <label className="visually-hidden" htmlFor={`comment-${id}`}>
+            Write a comment
+          </label>
+          <textarea
+            id={`comment-${id}`}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            maxLength={COMMENT_MAX}
+            rows={2}
+            placeholder="Write a comment"
+          />
+          {sendError && (
+            <p className="form-error" role="alert">
+              <TriangleAlert size={16} aria-hidden="true" />
+              Couldn't post your comment. Try again.
+            </p>
+          )}
+          <button className="action-button secondary" type="submit" disabled={sending || !text.trim()}>
+            {sending ? 'Posting…' : 'Post'}
+          </button>
+          <p className="muted small">Comments are public. Don't share anyone's personal details.</p>
+        </form>
+      )}
     </section>
   )
 }

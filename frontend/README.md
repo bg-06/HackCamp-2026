@@ -6,7 +6,7 @@ React + TypeScript + Vite. Mobile-first. Three tabs in the bottom nav:
 - **Issues** (`/issues`, deep blue, Track 2): City-only issues, voted up or down, with "Send the top 5 to Council"
 - **Profile** (`/me`): not built yet
 
-Both feeds are two-column, photo-first cards. The sort button offers For you / Newest / Popular / Nearest
+Volunteer is a two-column, photo-first feed. Issues is a plain list, one row each, with the vote on the right. The sort button offers For you / Newest / Popular / Nearest
 (plus Longest unsolved on Issues). The location button picks a city (only Vancouver has data so far) or
 uses the device's location for "Nearest".
 
@@ -40,13 +40,15 @@ src/
   components/BottomNav.tsx     Volunteer / Issues / Profile
   components/MasonryFeed.tsx   two-column feed
   components/EventTile.tsx     a volunteer card in the feed
-  components/IssueTile.tsx     an issue card in the feed, with the vote
+  components/IssueRow.tsx      one issue in the list, with the vote beside it
   components/VoteControl.tsx   ▲ score ▼
   components/LocationSheet.tsx bottom sheet: use my location, or pick a city
   components/VolunteerCard.tsx top of a volunteer page: details and sign-up
   components/PlaceSection.tsx  "Where": place, map, directions
   components/MapPreview.tsx    MapLibre map (lazy-loaded, OpenFreeMap tiles)
   components/Discussion.tsx    comments and the comment form
+  state/FeedProvider.tsx       lists, location, sort, search and scroll, kept while you open cards and come back
+  state/feed.ts                useFeed() and its types
   pages/HomePage.tsx           both feeds; the route picks which one
   pages/VolunteerPage.tsx      one volunteer opportunity
   pages/IssuePage.tsx          one issue

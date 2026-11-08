@@ -3,7 +3,7 @@
 const PHOTO_RATIOS = [1, 1.25, 1.33] // square, 4:5, 3:4
 const PLAIN_RATIOS = [0.5, 0.62, 0.75]
 
-/** A stable cover shape per id, so the feed looks staggered but doesn't jump around. */
+// Same shape for the same id every time, so the feed doesn't jump around
 export function coverRatio(id: string, hasPhoto = false) {
   let h = 0
   for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0
@@ -11,8 +11,11 @@ export function coverRatio(id: string, hasPhoto = false) {
   return ratios[h % ratios.length]!
 }
 
-/** "Illegal Dumping Case" → "Illegal dumping", for use inside a sentence. */
+// "Illegal Dumping Case" -> "Illegal dumping", for the middle of a sentence. Keeps acronyms like "BC".
 export function requestTypeInSentence(requestType: string) {
-  const t = requestType.replace(/ Case$/, '')
-  return t.charAt(0) + t.slice(1).toLowerCase()
+  return requestType
+    .replace(/ Case$/, '')
+    .split(' ')
+    .map((w, i) => (i === 0 || (w.length > 1 && w === w.toUpperCase()) ? w : w.toLowerCase()))
+    .join(' ')
 }

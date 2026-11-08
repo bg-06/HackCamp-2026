@@ -11,7 +11,6 @@ interface Props {
   distanceKm?: number
 }
 
-/** A card in the two-column feed. Photo first, then just the title and one line. Tap to open. */
 export default function EventTile({ event, ratio, distanceKm }: Props) {
   const style = categoryStyle(event.category)
   const Icon = style.icon

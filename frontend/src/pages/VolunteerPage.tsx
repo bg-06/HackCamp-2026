@@ -1,39 +1,48 @@
 import { ChevronLeft } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { getVolunteerEvent, setGoing } from "../api/client";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { getVolunteerEvent } from "../api/client";
 import Discussion from "../components/Discussion";
 import PlaceSection from "../components/PlaceSection";
 import VolunteerCard from "../components/VolunteerCard";
+import { useFeed } from "../state/feed";
 import type { VolunteerEvent } from "../types";
 
-/** One way to volunteer: the details and sign-up, where it is, and the discussion. */
 export default function VolunteerPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
-  const [event, setEvent] = useState<VolunteerEvent | null | undefined>(undefined); // undefined = loading
+  const location = useLocation();
+  const { events, setGoing } = useFeed();
+
+  // Opened from the feed: use what we already have. Opened from a link: fetch it.
+  const cached = events.items?.find((e) => e.id === id);
+  const [fetched, setFetched] = useState<VolunteerEvent | null | undefined>(undefined); // undefined = loading
   const [error, setError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const inFeed = Boolean(cached);
 
   useEffect(() => {
+    if (inFeed) return;
     let cancelled = false;
     getVolunteerEvent(id)
-      .then((e) => !cancelled && setEvent(e))
+      .then((e) => !cancelled && setFetched(e))
       .catch(() => !cancelled && setError(true));
     return () => {
       cancelled = true;
     };
-  }, [id, reloadKey]);
+  }, [id, inFeed, reloadKey]);
 
-  // Update the button right away, then tell the backend. Undo if the request fails.
+  const event = cached ?? fetched;
+
   function toggleGoing() {
     if (!event) return;
     const on = !event.going;
-    setEvent({ ...event, going: on });
-    setGoing(event.id, on).catch(() => setEvent((e) => (e ? { ...e, going: !on } : e)));
+    if (!inFeed) setFetched((e) => (e ? { ...e, going: on } : e));
+    setGoing(event.id, on).then((ok) => !ok && !inFeed && setFetched((e) => (e ? { ...e, going: !on } : e)));
   }
 
-  const goBack = () => (window.history.length > 1 ? navigate(-1) : navigate("/"));
+  // "default" means this page was opened directly, not from inside the app
+  const goBack = () => (location.key !== "default" ? navigate(-1) : navigate("/"));
 
   return (
     <div className="page">
@@ -50,7 +59,7 @@ export default function VolunteerPage() {
       <main className="page-content">
         {event === undefined && !error && <div className="skeleton" style={{ height: 320 }} aria-busy="true" />}
 
-        {error && (
+        {error && !event && (
           <div className="empty" role="alert">
             <p>Couldn't load this. Check your connection and try again.</p>
             <button

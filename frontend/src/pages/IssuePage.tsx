@@ -1,44 +1,57 @@
 import { ChevronLeft } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { getTrack2Issue, setVote } from "../api/client";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { getTrack2Issue } from "../api/client";
 import Discussion from "../components/Discussion";
 import PlaceSection from "../components/PlaceSection";
 import VoteControl from "../components/VoteControl";
 import { categoryStyle } from "../data/categories";
 import { VAN311_URL } from "../lib/issues";
+import { useFeed } from "../state/feed";
 import type { Track2Issue, Vote } from "../types";
 
-/** One City-only issue: what and how long, the vote, where it is, and the discussion. */
 export default function IssuePage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
-  const [issue, setIssue] = useState<Track2Issue | null | undefined>(undefined); // undefined = loading
+  const location = useLocation();
+  const { issues, setMyVote } = useFeed();
+
+  // Opened from the feed: use the issue we already have. Opened from a link: fetch it.
+  const cached = issues.items?.find((i) => i.issue_id === id);
+  const [fetched, setFetched] = useState<Track2Issue | null | undefined>(undefined); // undefined = loading
   const [error, setError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const inFeed = Boolean(cached);
 
   useEffect(() => {
+    if (inFeed) return;
     let cancelled = false;
     getTrack2Issue(id)
-      .then((i) => !cancelled && setIssue(i))
+      .then((i) => !cancelled && setFetched(i))
       .catch(() => !cancelled && setError(true));
     return () => {
       cancelled = true;
     };
-  }, [id, reloadKey]);
+  }, [id, inFeed, reloadKey]);
+
+  const issue = cached ?? fetched;
 
   function vote(issueId: string, value: Vote) {
-    if (!issue) return;
-    const before = issue.my_vote;
-    setIssue({ ...issue, my_vote: value });
-    setVote(issueId, value).catch(() => setIssue((i) => (i ? { ...i, my_vote: before } : i)));
+    if (inFeed) {
+      setMyVote(issueId, value);
+      return;
+    }
+    const before = fetched?.my_vote ?? 0;
+    setFetched((i) => (i ? { ...i, my_vote: value } : i));
+    setMyVote(issueId, value).then((ok) => !ok && setFetched((i) => (i ? { ...i, my_vote: before } : i)));
   }
 
-  const goBack = () => (window.history.length > 1 ? navigate(-1) : navigate("/issues"));
+  // "default" means this page was opened directly, not from inside the app
+  const goBack = () => (location.key !== "default" ? navigate(-1) : navigate("/issues"));
 
   return (
     <div className="page">
-      <header className="home-header track-fix">
+      <header className="home-header track-issues">
         <div className="top-bar">
           <button className="icon-button" onClick={goBack} aria-label="Back">
             <ChevronLeft size={24} />
@@ -51,7 +64,7 @@ export default function IssuePage() {
       <main className="page-content">
         {issue === undefined && !error && <div className="skeleton" style={{ height: 280 }} aria-busy="true" />}
 
-        {error && (
+        {error && !issue && (
           <div className="empty" role="alert">
             <p>Couldn't load this issue. Check your connection and try again.</p>
             <button
@@ -78,6 +91,7 @@ export default function IssuePage() {
         {issue && (
           <>
             <article className="detail">
+              {issue.photo_url && <img className="detail-photo" src={issue.photo_url} alt="" />}
               <p className="eyebrow">{categoryStyle(issue.category).label} · Only the City can fix this</p>
               <h1>{issue.request_type.replace(/ Case$/, "")}</h1>
               <p className="muted">{issue.address ?? issue.local_area}</p>

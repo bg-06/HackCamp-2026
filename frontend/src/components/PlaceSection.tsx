@@ -1,6 +1,7 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useCallback, useState } from 'react'
 
-const MapPreview = lazy(() => import('./MapPreview'))
+// If the map code itself can't be downloaded, show no map instead of breaking the page.
+const MapPreview = lazy(() => import('./MapPreview').catch(() => ({ default: () => null })))
 
 interface Props {
   lat?: number
@@ -8,18 +9,22 @@ interface Props {
   label: string // the address or place name
 }
 
-/** "Where": the place in words, a small map, and a link to directions in the phone's map app. */
 export default function PlaceSection({ lat, lng, label }: Props) {
+  const [mapFailed, setMapFailed] = useState(false)
+  const onFail = useCallback(() => setMapFailed(true), [])
   const hasPlace = lat !== undefined && lng !== undefined
+
   return (
     <section className="detail-section" aria-labelledby="where-heading">
       <h2 id="where-heading">Where</h2>
       <p>{label}</p>
       {hasPlace ? (
         <>
-          <Suspense fallback={<div className="map-preview" aria-hidden="true" />}>
-            <MapPreview lat={lat} lng={lng} label={label} />
-          </Suspense>
+          {!mapFailed && (
+            <Suspense fallback={<div className="map-preview" aria-hidden="true" />}>
+              <MapPreview lat={lat} lng={lng} label={label} onFail={onFail} />
+            </Suspense>
+          )}
           <a
             className="text-link"
             href={`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`}

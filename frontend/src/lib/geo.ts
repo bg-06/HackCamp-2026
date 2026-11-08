@@ -6,7 +6,7 @@ export interface City {
   available: boolean // we only have City of Vancouver 311 data so far
 }
 
-// Metro Vancouver cities, by population. Only Vancouver has data today; the rest show as "Coming soon".
+// Metro Vancouver, by population. Only Vancouver has data; the rest show "Coming soon".
 export const CITIES: City[] = [
   { name: 'Vancouver', centre: { lat: 49.2606, lng: -123.114 }, available: true },
   { name: 'Surrey', centre: { lat: 49.1913, lng: -122.849 }, available: false },
@@ -22,12 +22,12 @@ export const CITIES: City[] = [
 
 export const DEFAULT_CITY = CITIES[0]!
 
-/** The closest city centre. Good enough to pick a city from a GPS fix. */
-export function nearestCity(p: LatLng): City {
-  return CITIES.reduce((best, c) => (distanceKm(p, c.centre) < distanceKm(p, best.centre) ? c : best))
+// Same box the pipeline uses for "in Vancouver" (t311_pipeline.py). Checking the nearest city centre
+// instead would put east Vancouver in Burnaby.
+export function inVancouver(p: LatLng) {
+  return p.lat >= 49.19 && p.lat <= 49.32 && p.lng >= -123.27 && p.lng <= -123.02
 }
 
-/** Straight-line distance in km (haversine). */
 export function distanceKm(a: LatLng, b: LatLng) {
   const rad = (d: number) => (d * Math.PI) / 180
   const dLat = rad(b.lat - a.lat)
@@ -37,10 +37,11 @@ export function distanceKm(a: LatLng, b: LatLng) {
 }
 
 export function formatKm(km: number) {
-  return km < 1 ? `${Math.round(km * 1000 / 50) * 50} m` : `${km.toFixed(1)} km`
+  const m = Math.round((km * 1000) / 50) * 50
+  return m < 1000 ? `${m} m` : `${km.toFixed(1)} km`
 }
 
-/** Distance from `from` to an item, or undefined if the item has no place. */
+// undefined if the item has no place
 export function distanceTo(from: LatLng, item: { lat?: number; lng?: number }) {
   return item.lat === undefined || item.lng === undefined ? undefined : distanceKm(from, { lat: item.lat, lng: item.lng })
 }
