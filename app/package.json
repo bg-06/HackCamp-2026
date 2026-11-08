@@ -1,0 +1,23 @@
+{
+  "name": "block-by-block-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:scripts": "tsc",
+    "db:migrate": "tsc && node dist/scripts/migrate.js",
+    "ingest": "tsc && node dist/scripts/ingest.js refresh",
+    "ingest:311": "tsc && node dist/scripts/ingest.js refresh-311",
+    "ingest:static": "tsc && node dist/scripts/ingest.js refresh-static",
+    "ingest:status": "tsc && node dist/scripts/ingest.js status",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "postgres": "^3.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

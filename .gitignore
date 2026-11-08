@@ -1,3 +1,9 @@
 __pycache__/
+.venv/
+node_modules/
+.npm-cache/
+.next/
+dist/
 .databricks/
 node_modules
+.env
