@@ -7,6 +7,7 @@ import NewEventPage from './pages/NewEventPage'
 import ProfilePage from './pages/ProfilePage'
 import VolunteerPage from './pages/VolunteerPage'
 import FeedProvider from './state/FeedProvider'
+import AgentPage from './pages/AgentPage'
 
 // Keyed by id: going from one card's page to another starts fresh, with nothing left over from the last one.
 function VolunteerRoute() {
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="/events/:id" element={<OldEventLink />} />
           <Route path="/fix" element={<Navigate to="/issues" replace />} />
           <Route path="/me" element={<ProfilePage />} />
+          <Route path="/community-updates" element={<AgentPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <BottomNav />

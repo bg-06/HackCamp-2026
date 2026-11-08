@@ -40,6 +40,7 @@ export default function ProfilePage() {
       </header>
 
       <main className="page-content">
+        <p><Link className="text-link" to="/community-updates">Community updates and organization suggestions</Link></p>
         <section className="profile-head">
           <span className="avatar" aria-hidden="true">
             {signedIn && picture ? (

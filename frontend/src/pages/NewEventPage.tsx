@@ -1,7 +1,7 @@
 import { ChevronLeft, TriangleAlert } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { createEvent } from "../api/client";
+import { createEvent, getSuggestions, type Suggestion } from "../api/client";
 import { requestTypeInSentence } from "../lib/cover";
 import { useFeed } from "../state/feed";
 import type { HelpHotspot, NewEvent } from "../types";
@@ -30,15 +30,27 @@ function defaultTitle(h: HelpHotspot) {
 export default function NewEventPage() {
   const [params] = useSearchParams();
   const hotspotId = params.get("hotspot") ?? "";
+  const suggestionId = params.get("suggestion") ?? "";
+  const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
+  const [suggestionLoaded, setSuggestionLoaded] = useState(!suggestionId);
+  useEffect(() => {
+    if (!suggestionId) return;
+    let active = true;
+    getSuggestions().then(items => { if (active) setSuggestion(items.find(s => s.id === suggestionId) ?? null); })
+      .catch(() => { if (active) setSuggestion(null); }).finally(() => { if (active) setSuggestionLoaded(true); });
+    return () => { active = false; };
+  }, [suggestionId]);
   const { hotspots } = useFeed();
-  const hotspot = hotspots.items?.find((h) => h.id === hotspotId);
+  const draftHotspot = suggestion?.payload.event_draft.hotspot_id.replace(/^([^:|]+):/, "$1|");
+  const hotspot = hotspots.items?.find((h) => h.id === (suggestionId ? draftHotspot : hotspotId));
 
   return (
     <div className="page">
       <Header />
       <main className="page-content">
         {!hotspots.items && !hotspots.error && <div className="skeleton" style={{ height: 320 }} aria-busy="true" />}
-        {(hotspots.error || (hotspots.items && !hotspot)) && (
+        {suggestionId && suggestionLoaded && !suggestion && <p className="form-error">This suggestion is unavailable. Sign in with an approved organization account and try again.</p>}
+        {suggestionLoaded && (!suggestionId || suggestion) && (hotspots.error || (hotspots.items && !hotspot)) && (
           <div className="empty">
             <p>Pick a spot from "Needs help" to start an event there.</p>
             <Link className="chip-button" to="/">
@@ -47,7 +59,7 @@ export default function NewEventPage() {
           </div>
         )}
         {/* keyed so the form starts fresh if the spot changes */}
-        {hotspot && <EventForm key={hotspot.id} hotspot={hotspot} />}
+        {hotspot && suggestionLoaded && (!suggestionId || suggestion) && <EventForm key={hotspot.id + suggestionId} hotspot={hotspot} suggestion={suggestion} />}
       </main>
     </div>
   );
@@ -69,18 +81,18 @@ function Header() {
   );
 }
 
-function EventForm({ hotspot }: { hotspot: HelpHotspot }) {
+function EventForm({ hotspot, suggestion }: { hotspot: HelpHotspot; suggestion: Suggestion | null }) {
   const navigate = useNavigate();
   const { addEvent, requireSignIn } = useFeed();
 
-  const [title, setTitle] = useState(() => defaultTitle(hotspot));
+  const [title, setTitle] = useState(() => suggestion?.payload.event_draft.title ?? defaultTitle(hotspot));
   const [today] = useState(() => vancouverDate(new Date()));
   const [date, setDate] = useState(nextSaturday);
   const [start, setStart] = useState("10:00");
   const [end, setEnd] = useState("12:00");
   const [location, setLocation] = useState(hotspot.near ?? hotspot.local_area);
   const [spots, setSpots] = useState("10");
-  const [bring, setBring] = useState("Work gloves");
+  const [bring, setBring] = useState(suggestion?.payload.event_draft.what_to_bring ?? "Work gloves");
   const [problem, setProblem] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -111,6 +123,7 @@ function EventForm({ hotspot }: { hotspot: HelpHotspot }) {
 
     const input: NewEvent = {
       hotspotId: hotspot.id,
+      suggestionId: suggestion?.id,
       title: title.trim(),
       startsAt,
       endsAt,

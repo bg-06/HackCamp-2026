@@ -74,6 +74,7 @@ export interface HelpHotspot {
 
 // What the "Start an event" form sends
 export interface NewEvent {
+  suggestionId?: string
   hotspotId?: string
   title: string
   startsAt: string
