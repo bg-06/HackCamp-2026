@@ -23,9 +23,9 @@ def hs(cell=CELL_A, rt=DUMP, cat="Garbage and Dumping", area="Mount Pleasant",
     }
 
 
-def ev(cell=CELL_A, days=3, done=None):
+def ev(cell=CELL_A, days=3, done=None, hour=15):
     start = datetime.combine(TODAY + timedelta(days=days), datetime.min.time(),
-                             tzinfo=timezone.utc).replace(hour=15)
+                             tzinfo=timezone.utc).replace(hour=hour)
     return {"h3_r9": cell, "done_at": done, "starts_at": start}
 
 
@@ -179,3 +179,45 @@ def test_body_plain_text_and_data_numbers_only():
     assert "next two weeks" in body
     assert set(re.findall(r"\d+", body)) <= {"9", "6", "5"}
     assert 2 <= len(re.findall(r"[.?!](?:\s|$)", body)) <= 4
+
+
+def test_window_uses_vancouver_time_not_utc():
+    # 02:00 UTC on day 15 is the evening of day 14 in Vancouver: covered.
+    assert suggest([hs()], [ev(days=15, hour=2)], [], TODAY) == []
+    # 02:00 UTC on day 0 is yesterday evening in Vancouver: not covered.
+    assert len(suggest([hs()], [ev(days=0, hour=2)], [], TODAY)) == 1
+
+
+def test_naive_event_time_treated_as_local():
+    e = {"h3_r9": CELL_A, "done_at": None,
+         "starts_at": datetime(2026, 11, 22, 19, 0)}  # day 14, 7pm local
+    assert suggest([hs()], [e], [], TODAY) == []
+
+
+def test_last_reported_date_shown_in_vancouver_time():
+    last = datetime(2026, 11, 6, 3, 0, tzinfo=timezone.utc)  # Nov 5, 7pm Vancouver
+    assert "most recently on Nov 5." in suggest([hs(last=last)], [], [], TODAY)[0]["body"]
+
+
+def test_graffiti_title_is_category_appropriate():
+    p = suggest([hs(rt=TAG, cat="Graffiti")], [], [], TODAY)[0]
+    assert p["title"] == "Organise a graffiti walk near Mount Pleasant?"
+    assert p["event_draft"]["title"] == "Graffiti walk near Mount Pleasant"
+
+
+def test_verb_agreement_per_phrase():
+    for rt, start in [
+        ("Street Cleaning and Debris Pick Up Case", "Street debris has been reported"),
+        ("Loose Litter Clean Up Case", "Loose litter has been reported"),
+        ("Graffiti Removal - Park Property Case", "Graffiti in parks has been reported"),
+        ("Abandoned Non-Recyclables-Small Case", "Small abandoned items have been reported"),
+        ("Abandoned Recyclables Case", "Abandoned recyclables have been reported"),
+    ]:
+        assert suggest([hs(rt=rt)], [], [], TODAY)[0]["body"].startswith(start), rt
+
+
+def test_unit_pluralisation():
+    body = suggest([hs(n=1, months=1)], [], [], TODAY)[0]["body"]
+    assert "1 time over 1 month " in body
+    body = suggest([hs(n=3, months=2)], [], [], TODAY)[0]["body"]
+    assert "3 times over 2 months " in body

@@ -15,11 +15,12 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import h3
 
 from .programs import CLEANUP_LINE, is_graffiti, program_for
-from .wording import plain_words
+from .wording import is_plural, plain_words
 
 AUTHOR = "block-steward-agent"
 MAX_ORG_KM = 2.0
@@ -27,8 +28,14 @@ _MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 
+LOCAL_TZ = ZoneInfo("America/Vancouver")
+
+
 def _as_date(value) -> date:
+    """Local (Vancouver) calendar date; naive datetimes are already local."""
     if isinstance(value, datetime):
+        if value.tzinfo is not None:
+            value = value.astimezone(LOCAL_TZ)
         return value.date()
     return value
 
@@ -69,11 +76,16 @@ def _short_date(value) -> str:
     return f"{_MONTHS[d.month - 1]} {d.day}"
 
 
+def _count(n: int, unit: str) -> str:
+    return f"{n} {unit}" if n == 1 else f"{n} {unit}s"
+
+
 def _body(h: dict, program) -> str:
     what = plain_words(h["request_type"])
     sentences = [
-        f"{what[0].upper() + what[1:]} {'has' if h['times_reported'] == 1 else 'have'} "
-        f"been reported {h['times_reported']} times over {h['months_seen']} months "
+        f"{what[0].upper() + what[1:]} {'have' if is_plural(h['request_type']) else 'has'} "
+        f"been reported {_count(h['times_reported'], 'time')} over "
+        f"{_count(h['months_seen'], 'month')} "
         f"in this part of {h['local_area']}, most recently on "
         f"{_short_date(h['last_reported'])}.",
         "Nothing is planned here in the next two weeks.",
@@ -100,7 +112,8 @@ def _payload(h: dict, today: date, orgs, max_orgs) -> dict:
         "author": AUTHOR,
         "local_area": area,
         "org_ids": _nearest_org_ids(lat, lng, orgs, max_orgs),
-        "title": f"Host a cleanup near {area}?",
+        "title": (f"Organise a graffiti walk near {area}?" if graffiti
+                  else f"Host a cleanup near {area}?"),
         "body": _body(h, program),
         "hotspot": {
             "h3_r9": h["h3_r9"],

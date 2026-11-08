@@ -18,3 +18,14 @@ def plain_words(request_type: str) -> str:
     if text.endswith(" Case"):
         text = text[: -len(" Case")]
     return text.lower()
+
+
+_PLURAL = {
+    "Abandoned Non-Recyclables-Small Case",
+    "Abandoned Recyclables Case",
+}
+
+
+def is_plural(request_type: str) -> bool:
+    """True when the plain-words phrase is plural ("have been"), else "has been"."""
+    return request_type in _PLURAL
