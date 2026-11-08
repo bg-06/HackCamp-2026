@@ -32,6 +32,17 @@ The official Lower Mainland Green Team page is also validated on every refresh. 
 
 The reusable parser can read public schema.org event JSON-LD without calling Meetup's private `/api`, `/gql`, RSS, Atom, or internal Next.js endpoints. Meetup's current public group page no longer exposes stable event metadata, so it is not an active ingestion source; the official Green Teams Canada signup opportunity remains available instead.
 
+### Other validated Vancouver opportunities
+
+The ingest validates explicit volunteer wording on each official page before publishing one ongoing opportunity per organization:
+
+- Stanley Park Ecology: restoration, monitoring and education roles; official interest form and image.
+- Food Stash Foundation: food sorting, boxing and market roles; official application and image.
+- Vancouver Food Runners: flexible, app-based food rescue deliveries.
+- Greater Vancouver Food Bank: group volunteer applications; official application and image.
+
+A missing validation marker causes only that source to fail, preserving its previous database record and preventing a redesigned or error page from being published as an opportunity.
+
 ## Data policy
 
 - Respect `robots.txt` and source terms.
