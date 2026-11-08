@@ -10,6 +10,8 @@ export interface Auth {
   // Auth0 leaves the page and comes back to the same URL; mock sign-in happens straight away.
   login: () => void;
   logout: () => void;
+  /** Renames you everywhere (comments, hosted events). Throws if the name is invalid or the save fails. */
+  rename: (name: string) => Promise<void>;
   error: string | null; // set when Auth0 isn't configured or the last sign-in failed
 }
 

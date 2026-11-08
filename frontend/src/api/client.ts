@@ -185,6 +185,12 @@ export async function getMyHistory(): Promise<VolunteerRecord[]> {
   return request<VolunteerRecord[]>("/me/history");
 }
 
+/** The name you saved, or null if none yet. Real API only. */
+export async function getDisplayName(): Promise<string | null> {
+  if (USE_MOCK) return null;
+  return (await request<{ displayName: string | null }>("/me/profile")).displayName;
+}
+
 /** Sets the name shown on your comments and the events you host. Real API only. */
 export async function saveDisplayName(displayName: string): Promise<void> {
   if (USE_MOCK) return;

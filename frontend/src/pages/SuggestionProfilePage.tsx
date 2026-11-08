@@ -124,9 +124,6 @@ export default function SuggestionProfilePage() {
         </dl>
 
         <div className="profile-buttons">
-          <button className="outline-button" onClick={signedIn ? signOut : signIn} disabled={!ready}>
-            {signedIn ? "Sign out" : "Sign in"}
-          </button>
           <button className="outline-button" onClick={() => history && downloadHoursRecord(history)} disabled={!history || history.length === 0}>
             Download hours
           </button>

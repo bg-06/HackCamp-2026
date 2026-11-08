@@ -20,9 +20,8 @@
   --text-muted: #a5a5ad;
   --warning: #f0a35e;
 
-  /* Cards need no lift in dark mode: #1c1c20 already sits clearly off #111114.
-     Light mode turns this on, because there surface and page are both white. */
-  --card-shadow: none;
+  /* Cards sit on the page without a lift; a small corner softens the edges. */
+  --card-radius: 5px;
 
   --track1: var(--blue);
   --track1-light: var(--blue-light);
@@ -40,22 +39,20 @@
 
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
-    --bg: #eef2f6; --surface: #ffffff; --surface-muted: #e3e9ef;
+    --bg: #f9fafa; --surface: #ffffff; --surface-muted: #e3e9ef;
     --chrome: #ffffff; --field: #e3e9ef;
     --border: #777f88; --text: #111214; --text-muted: #595f69;
     --blue: #2563eb; --blue-dark: #1d4ed8; --blue-light: #e8f0fe;
     --warning: #a8500f;
-    --card-shadow: 0 1px 2px rgb(17 18 20 / 7%), 0 2px 8px rgb(17 18 20 / 4%);
     color-scheme: light;
   }
 }
 :root[data-theme="light"] {
-  --bg: #eef2f6; --surface: #ffffff; --surface-muted: #e3e9ef;
+  --bg: #f9fafa; --surface: #ffffff; --surface-muted: #e3e9ef;
   --chrome: #ffffff; --field: #e3e9ef;
   --border: #777f88; --text: #111214; --text-muted: #595f69;
   --blue: #2563eb; --blue-dark: #1d4ed8; --blue-light: #e8f0fe;
   --warning: #a8500f;
-  --card-shadow: 0 1px 2px rgb(17 18 20 / 7%), 0 2px 8px rgb(17 18 20 / 4%);
   color-scheme: light;
 }
 :root[data-theme="dark"] { color-scheme: dark; }
@@ -364,9 +361,8 @@ button {
   width: 100%;
   overflow: hidden;
   border: none;
-  border-radius: 0;
+  border-radius: var(--card-radius);
   background: var(--surface);
-  box-shadow: var(--card-shadow);
 }
 .tile-link {
   display: block;
@@ -413,7 +409,7 @@ a.tile:hover h3,
 .tile-meta.overdue {
   color: var(--warning);
 }
-/* ---------- Issues list: one row each, the vote split off by a thin line ---------- */
+/* ---------- Issues list: one row each, with the vote column on the right ---------- */
 .issue-list {
   display: grid;
   grid-template-columns: minmax(0, 1fr); /* a long title gets cut off instead of pushing the vote off screen */
@@ -425,9 +421,8 @@ a.tile:hover h3,
 .issue-row {
   display: flex;
   border: none;
-  border-radius: 0;
+  border-radius: var(--card-radius);
   background: var(--surface);
-  box-shadow: var(--card-shadow);
 }
 .issue-row-main {
   flex: 1;
@@ -475,7 +470,6 @@ a.tile:hover h3,
   display: flex;
   align-items: center;
   padding: 6px 8px;
-  border-left: 1px solid var(--border);
 }
 
 /* ---------- Voting ---------- */
@@ -803,7 +797,7 @@ a.tile:hover h3,
 }
 .tile.skeleton {
   border-color: transparent;
-  box-shadow: none;
+  border-radius: var(--card-radius);
 }
 @keyframes pulse {
   from {
@@ -873,9 +867,8 @@ a.tile:hover h3,
   grid-template-columns: repeat(3, 1fr);
   margin: 16px 0 0;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--card-radius);
   background: var(--surface);
-  box-shadow: var(--card-shadow);
 }
 /* Number on top, label under it */
 .stats > div {
@@ -1071,9 +1064,8 @@ a.tile:hover h3,
 .help-card {
   flex: 0 0 190px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--card-radius);
   background: var(--surface);
-  box-shadow: var(--card-shadow);
   scroll-snap-align: start;
 }
 .help-card-link {
@@ -1082,7 +1074,7 @@ a.tile:hover h3,
   gap: 2px;
   height: 100%;
   padding: 8px 12px 10px;
-  border-radius: var(--radius);
+  border-radius: var(--card-radius);
 }
 .help-card-link:hover { background: var(--surface-muted); }
 .help-card-link:focus-visible { outline-offset: -3px; }

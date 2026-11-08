@@ -1,7 +1,7 @@
 import { Auth0Provider, useAuth0, type AppState } from "@auth0/auth0-react";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { saveDisplayName, setAccessTokenGetter, USE_MOCK } from "../api/client";
+import { getDisplayName, saveDisplayName, setAccessTokenGetter, USE_MOCK } from "../api/client";
 import { AuthContext, publicName, type Auth } from "./auth";
 
 const DOMAIN = import.meta.env.VITE_AUTH0_DOMAIN;
@@ -11,17 +11,19 @@ const AUDIENCE = import.meta.env.VITE_AUTH0_AUDIENCE;
 /** Mock mode: a sample sign-in, no account and no tokens. */
 function MockAuth({ children }: { children: ReactNode }) {
   const [signedIn, setSignedIn] = useState(false);
+  const [name, setName] = useState("You");
   const value = useMemo<Auth>(
     () => ({
       ready: true,
       signedIn,
-      name: signedIn ? "You" : null,
+      name: signedIn ? name : null,
       picture: null,
       login: () => setSignedIn(true),
       logout: () => setSignedIn(false),
+      rename: async (next: string) => setName(next.trim()),
       error: null,
     }),
-    [signedIn],
+    [signedIn, name],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
@@ -30,7 +32,7 @@ function MockAuth({ children }: { children: ReactNode }) {
 function MissingConfig({ children }: { children: ReactNode }) {
   const error = "Sign-in isn't set up: add VITE_AUTH0_DOMAIN, VITE_AUTH0_CLIENT_ID and VITE_AUTH0_AUDIENCE to frontend/.env.";
   const value = useMemo<Auth>(
-    () => ({ ready: true, signedIn: false, name: null, picture: null, login: () => window.alert(error), logout: () => {}, error }),
+    () => ({ ready: true, signedIn: false, name: null, picture: null, login: () => window.alert(error), logout: () => {}, rename: async () => {}, error }),
     [error],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -44,11 +46,27 @@ function Auth0Bridge({ children }: { children: ReactNode }) {
   // component, and child effects run before parent ones.
   setAccessTokenGetter(isAuthenticated ? () => getAccessTokenSilently() : null);
 
-  // Keep the API's display name in step with the Auth0 profile, once per sign-in or name change.
-  const displayName = isAuthenticated ? publicName(user) : null;
+  // The name people see. A name you chose in Settings wins; the Auth0 profile only seeds it the first time.
+  const [savedName, setSavedName] = useState<string | null>(null);
+  const seedName = isAuthenticated ? publicName(user) : null;
   useEffect(() => {
-    if (displayName) saveDisplayName(displayName).catch(() => {}); // comments fall back to "Neighbour"
-  }, [displayName]);
+    if (!isAuthenticated) { setSavedName(null); return; }
+    let cancelled = false;
+    getDisplayName()
+      .then(async (existing) => {
+        if (cancelled) return;
+        if (existing) return setSavedName(existing);
+        if (seedName) { await saveDisplayName(seedName); if (!cancelled) setSavedName(seedName); }
+      })
+      .catch(() => {}); // comments fall back to "Neighbour"
+    return () => { cancelled = true; };
+  }, [isAuthenticated, seedName]);
+
+  const rename = useCallback(async (next: string) => {
+    const clean = next.replace(/\s+/g, " ").trim();
+    await saveDisplayName(clean);
+    setSavedName(clean);
+  }, []);
 
   const login = useCallback(() => {
     // Come back to the page they were on. What they tapped isn't replayed, since the page reloads.
@@ -63,13 +81,14 @@ function Auth0Bridge({ children }: { children: ReactNode }) {
     () => ({
       ready: !isLoading,
       signedIn: isAuthenticated,
-      name: user?.name ?? user?.nickname ?? user?.email ?? null,
+      name: savedName ?? seedName ?? user?.name ?? user?.nickname ?? null,
       picture: user?.picture ?? null,
       login,
       logout: signOut,
+      rename,
       error: error?.message ?? null,
     }),
-    [isLoading, isAuthenticated, user, login, signOut, error],
+    [isLoading, isAuthenticated, user, savedName, seedName, login, signOut, rename, error],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
