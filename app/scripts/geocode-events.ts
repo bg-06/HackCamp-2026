@@ -7,14 +7,17 @@ import { geocodableAddress, geocodeAddress } from '../lib/volunteer-sources/geoc
 config({ path: join(dirname(fileURLToPath(import.meta.url)), '../../../.env') })
 const { sql } = await import('../lib/db.js')
 try {
-  const rows = await sql<{ id: string; location: string }[]>`
-    SELECT id, location FROM events WHERE latitude IS NULL AND longitude IS NULL
-      AND location IS NOT NULL AND source_withdrawn_at IS NULL AND done_at IS NULL
-      AND (starts_at IS NULL OR COALESCE(ends_at, starts_at) >= now())`
+  // in_vancouver: the event's area is one of the City's local areas, so a bare
+  // intersection like "Main St and E Broadway" can be looked up in Vancouver.
+  const rows = await sql<{ id: string; location: string; in_vancouver: boolean }[]>`
+    SELECT e.id, e.location, EXISTS (SELECT 1 FROM local_areas la WHERE la.name = e.local_area) AS in_vancouver
+      FROM events e WHERE e.latitude IS NULL AND e.longitude IS NULL
+      AND e.location IS NOT NULL AND e.source_withdrawn_at IS NULL AND e.done_at IS NULL
+      AND (e.starts_at IS NULL OR COALESCE(e.ends_at, e.starts_at) >= now())`
   const results = new Map<string, Awaited<ReturnType<typeof geocodeAddress>>>()
   let updated = 0
   for (const row of rows) {
-    const address = geocodableAddress(row.location)
+    const address = geocodableAddress(row.location, row.in_vancouver)
     if (!address) continue
     if (!results.has(address)) {
       const [cached] = await sql<{ latitude: number; longitude: number; matched_address: string; precision: string; score: number }[]>`
