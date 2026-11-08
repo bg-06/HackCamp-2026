@@ -40,6 +40,12 @@ The ingest validates explicit volunteer wording on each official page before pub
 - Food Stash Foundation: food sorting, boxing and market roles; official application and image.
 - Vancouver Food Runners: flexible, app-based food rescue deliveries.
 - Greater Vancouver Food Bank: group volunteer applications; official application and image.
+- VOKRA: current cat rescue, care, driving and support roles; official application and image.
+- BC SPCA: current animal welfare roles through its volunteer database; official image.
+- S.U.C.C.E.S.S.: current community, mentoring, events and newcomer-support opportunities; official image.
+- SPEC Repair Café: repair, check-in, event support and apprentice roles; official application and image.
+
+Every currently active organization-backed listing has an image downloaded from its official page and stored in `event_images`.
 
 A missing validation marker causes only that source to fail, preserving its previous database record and preventing a redesigned or error page from being published as an opportunity.
 
