@@ -1,0 +1,24 @@
+bundle:
+  name: block-by-block
+
+workspace:
+  host: https://dbc-7f6625ff-1e9b.cloud.databricks.com
+
+resources:
+  pipelines:
+    t311_pipeline:
+      name: t311_pipeline
+      catalog: bbb
+      schema: bronze
+      serverless: true
+      channel: CURRENT
+      libraries:
+        - file:
+            path: ./pipelines/t311_pipeline.py
+        - file:
+            path: ./sql/gold_views.sql
+
+targets:
+  dev:
+    default: true
+    mode: development

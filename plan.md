@@ -648,3 +648,58 @@ Owner and effort: P3, about 2 to 3 hours, since the report form already exists.
 - **Spoken neighbourhood briefings**: ElevenLabs reads the weekly summary aloud on the area page. Accessibility angle, about an hour
 - **Maritime desktop pre-fill**: the agent opens the City's web form in a Maritime Linux desktop and pre-fills it for the resident to review and send themselves
 - **Nightly photo re-check in Databricks** (see 16.1)
+
+### 16.3 More community ideas from Vancouver Open Data
+
+The same portal (`opendata.vancouver.ca/api/explore/v2.1/`, 200 datasets) has a lot that fits with 311. Every dataset below uses the same Opendatasoft export URL pattern as 311 (`/catalog/datasets/<id>/exports/parquet`), so each one is a new landing folder plus a bronze table in the existing pipeline. Most have `geo_point_2d` and a `local_area` / `geo_local_area` column, so they join to our cases by H3 cell or by neighbourhood name.
+
+Grouped by what they add for residents. Effort assumes the core loop is done.
+
+**A. "Is the City already on it?" (cuts duplicate reports)**
+
+| Idea | Datasets | What residents see | Effort |
+|---|---|---|---|
+| Roadwork context on reports | `road-ahead-current-road-closures` (23), `road-ahead-projects-under-construction` (68), `road-ahead-upcoming-projects` (199), `city-project-package-street` (290) | When someone reports a pothole or a blocked sidewalk, the report page says "There's City roadwork on this block until Dec 12" with the project link. The agent uses it in triage too: no 311 draft if a project already covers the spot | 1 to 2 h |
+| Planned fixes vs complaints | `pavement-condition-rating-2023` (8.5k segments, `pci_rating`), `sidewalk-condition-rating` (15.6k hundred-blocks, updated daily) | A "worst streets" layer: road segments with a low rating **and** lots of 311 pothole/sidewalk cases. Strong Databricks story: geospatial join of line segments to H3 cells (`h3_polyfillash3` on the segment geometry) | 2 to 3 h |
+| Streetlight IDs on outage reports | `street-lighting-poles` (58k, `node_number`) | When a resident drops a pin for a light that's out, snap to the nearest pole and include its node number in the 311 draft. The City can act on it straight away | 1 h |
+| Storm drain context | `sewer-catch-basins` (45k) | Flooding/clogged drain reports snap to the nearest catch basin. Also enables an **Adopt-a-Drain** forum thread per block before the rainy season | 1 h |
+
+**B. Neighbourhood pages that feel local** (all small tables, cheap to add to `/area/:name`)
+
+| Idea | Datasets | Notes |
+|---|---|---|
+| Neighbourhood boundaries on the map | `local-area-boundary` (22 polygons) | Should probably be core: lets the map outline the 22 areas and lets the 66% of cases without coordinates show as a shaded area instead of nothing (fixes our honesty note in section 6) |
+| Helpful places nearby | `public-washrooms` (147, hours, wheelchair access), `drinking-fountains` (278, `in_operation`), `community-centres`, `libraries` | A "near me" panel on the area page. A broken fountain or a closed washroom becomes a one-tap report with the asset prefilled |
+| Food and support | `free-and-low-cost-food-programs` (77, days open, meals/hampers, wheelchair access), `homeless-shelter-locations` (17, pets/carts/meals) | A "Get help" card per area. Strong for Community Impact. Link out, don't build anything new |
+| Green neighbourhood | `community-gardens-and-food-trees` (170), `public-trees` (184k, species, height) | "Your area has 12 community gardens and 8,400 street trees." Fallen-tree reports can name the species and asset ID |
+| What's being built | `issued-building-permits` (52.6k, updated daily, `projectvalue`, `typeofwork`) | "This week in Kitsilano: 14 permits issued, $22M of work." Explains bursts of construction noise and dust complaints |
+
+**C. Accountability and civic voice**
+
+| Idea | Datasets | Notes |
+|---|---|---|
+| Landlords with open violations | `rental-standards-current-issues` (483 buildings, `totaloutstanding`, updated daily) | A renter can look up their building and see outstanding City orders. Very relevant to the theme; keep it factual and link to the City's own detail page (`detailurl`) |
+| Who to contact | `elected-officials-contact-information` (18) | On a recurring-issue card: "This has been reported 9 times in 6 months. Write to Council" with a prefilled email the resident sends themselves. Fits the "agent drafts, resident sends" rule |
+| What Council decided | `council-voting-records` (83.8k votes, `agenda_description`) | Genie question for the demo: "Has Council voted on anything about graffiti this year?" Or the agent adds a related recent vote to the weekly briefing. Keep it to recent votes |
+| Where the money goes | `2026-multi-year-capital-project-budget-requests-and-capital-expenditure-budget` (630 rows) | `ai_classify` the project names into our 10 categories, then compare 311 volume to capital budget per category. A good Genie/dashboard tile, not app work |
+| How busy 311 is | `3-1-1-contact-centre-metrics` (daily calls, abandon rate, speed of answer) | A small "calling 311 today: average wait X min" line nudges residents toward the online form. Dashboard tile |
+
+**D. Seasonal and safety**
+
+| Idea | Datasets | Notes |
+|---|---|---|
+| Snow readiness | `snow-removal-routes` (454, `priority`) | Winter is close. "Is my street a priority snow route?" on the area page; icy-sidewalk reports off-route get a note to clear their own frontage (City bylaw) |
+| Flood risk | `designated-floodplain` (8) | Flag reports inside a floodplain as higher priority in triage |
+| Lost pets | `animal-control-inventory-lost-and-found` (18.5k, updated daily) | Forum post template for lost/found pets that links the City's list. No location field, so area-level only |
+
+**What's not worth it**: graffiti (`graffiti` is a snapshot last refreshed 2026-05, and 311 graffiti cases are fresher), parking tickets (huge, no community angle), census profiles (files only, no API records), Olympic datasets, LiDAR and orthophotos.
+
+**Recommended picks if there's time**, in order:
+
+1. `local-area-boundary`: arguably core, makes the unmapped two-thirds of cases visible
+2. Road Ahead projects in triage and on reports: directly reduces duplicate reports, which is the main pitch
+3. Pavement/sidewalk ratings joined with 311 potholes: the best extra Databricks demo moment
+4. "Get help" and "near me" cards: cheap and good for Community Impact
+5. Rental standards lookup and "write to Council": the strongest civic voice story for the video
+
+Pipeline change for any of these: add each dataset id to the fetch task as a list, land to `/Volumes/bbb/raw/landing/<id>/`, and add one bronze table plus one gold view per idea. Small reference tables (under ~1k rows) can be full refreshes; `issued-building-permits`, `rental-standards-current-issues` and `sidewalk-condition-rating` update daily and can use the same `last_modified`-style watermark if the dataset has a date field, or a full refresh otherwise.
