@@ -97,7 +97,7 @@ def api_json(url, params=None, timeout=120, sleep=time.sleep):
     last_error = None
     for attempt in range(4):
         try:
-            req = urllib.request.Request(url, headers={"user-agent": "BlockByBlock-Ingest/1.0"})
+            req = urllib.request.Request(url, headers={"user-agent": "GreenHandsBC-Ingest/1.0"})
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except Exception as e:

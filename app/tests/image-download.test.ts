@@ -17,7 +17,7 @@ test('downloads an allowed image with safe request options', async () => {
   assert.equal(image.mimeType, 'image/jpeg')
   assert.deepEqual([...image.data], [1, 2, 3])
   assert.equal(request?.init?.credentials, 'omit')
-  assert.match(new Headers(request?.init?.headers).get('user-agent') ?? '', /BlockByBlock-Volunteer-Indexer/)
+  assert.match(new Headers(request?.init?.headers).get('user-agent') ?? '', /GreenHandsBC-Volunteer-Indexer/)
 })
 
 test('rejects unsafe URLs, credentials, and unsupported content types', async () => {

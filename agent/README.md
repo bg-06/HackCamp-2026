@@ -1,6 +1,6 @@
 # Block Steward agent
 
-A small Python agent for Block by Block. It never decides anything for people; it only suggests.
+A small Python agent for GreenHands BC. It never decides anything for people; it only suggests.
 
 - **Daily suggestions:** finds recurring Track 1 hotspots (`gold_help_hotspots`) with no event planned in the next 14 days, picks the nearest orgs, and drafts an event with the matching City program. Org admins accept (opens Create event, prefilled) or dismiss.
 - **Weekly briefings:** one "ways to help this week" post per area. Gemini words it if `GEMINI_API_KEY` is set; otherwise a built-in template does. Graffiti spots are reported in Van311 or surveyed on a walk, never painted over.

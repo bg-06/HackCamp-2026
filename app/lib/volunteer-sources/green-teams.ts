@@ -54,7 +54,7 @@ export class GreenTeamsActivitiesAdapter {
     target.searchParams.set('per_page', '100')
     target.searchParams.set('_fields', 'id,date_gmt,link,slug,title,content')
     const response = await fetch(target, {
-      headers: { 'user-agent': 'BlockByBlock-Volunteer-Indexer/1.0 (+https://github.com/bg-06/HackCamp-2026)' },
+      headers: { 'user-agent': 'GreenHandsBC-Volunteer-Indexer/1.0 (+https://github.com/bg-06/HackCamp-2026)' },
       signal: AbortSignal.timeout(30_000),
     })
     if (!response.ok) throw new Error(`${this.id}: ${response.status} ${response.statusText}`)

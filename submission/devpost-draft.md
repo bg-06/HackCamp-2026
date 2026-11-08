@@ -1,4 +1,4 @@
-# Block by Block
+# GreenHands BC
 
 Draft for team review — November 8, 2026. Verify the final deployed build before submitting. Implementation in the repository is not evidence of a successful live demo.
 
@@ -8,10 +8,10 @@ Turn Vancouver's neighbourhood data into ways to help, one block at a time.
 ## Inspiration
 Seeing a problem in your neighbourhood is easy. Knowing what to do next can be harder. Volunteer opportunities are scattered, recurring issues can disappear into reporting systems, and residents do not always know which problems they can help with themselves.
 
-We built Block by Block around one question: how can local data help someone take a useful next step in their own neighbourhood?
+We built GreenHands BC around one question: how can local data help someone take a useful next step in their own neighbourhood?
 
 ## What it does
-Block by Block brings Vancouver volunteer opportunities and neighbourhood issues into a mobile-first web app. It separates two kinds of action: things residents can help with, and issues that require the City.
+GreenHands BC brings Vancouver volunteer opportunities and neighbourhood issues into a mobile-first web app. It separates two kinds of action: things residents can help with, and issues that require the City.
 
 Residents can browse opportunities, explore recurring hotspots, and start a community event from a hotspot. The app includes sign-ups for in-app events, discussions, votes on City issues, and a personal activity view. Listings from external organizations direct residents to the original signup site.
 

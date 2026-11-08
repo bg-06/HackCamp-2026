@@ -39,7 +39,7 @@ The one-time historical load reads `data/raw/3-1-1-service-requests.parquet` loc
 Schedule `npm --prefix app run ingest` hourly or daily afterward. Incremental 311 refreshes read `max(last_modified_timestamp)` from `raw_311_requests` and fetch only newer source rows. Updated City records are appended as new rows; Databricks silver keeps the current version.
 
 ```cron
-15 * * * * cd /path/to/HackCamp-2026 && npm --prefix app run ingest >> /var/log/blockbyblock-ingest.log 2>&1
+15 * * * * cd /path/to/HackCamp-2026 && npm --prefix app run ingest >> /var/log/greenhands-bc-ingest.log 2>&1
 ```
 
 ## Tables

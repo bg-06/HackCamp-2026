@@ -1,4 +1,4 @@
-# Dashboard: Block by Block: Vancouver 311
+# Dashboard: GreenHands BC: Vancouver 311
 
 The dashboard is code. `block_by_block.lvdash.json` is deployed and published by the bundle
 (`resources.dashboards.block_by_block` in `databricks/databricks.yml`, on the `warehouse_id` variable):

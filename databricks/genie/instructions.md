@@ -1,6 +1,6 @@
 # Genie space instructions
 
-Space name: `Block by Block: Vancouver 311`. Warehouse: the same SQL warehouse as the dashboard.
+Space name: `GreenHands BC: Vancouver 311`. Warehouse: the same SQL warehouse as the dashboard.
 
 ## Tables to add to the Genie space
 
@@ -86,7 +86,7 @@ From the repo root, with the `databricks` CLI logged in:
 python databricks/genie/create_space.py
 ```
 
-The script reads this file and creates the space `Block by Block: Vancouver 311`, or updates it if it already exists. Note the space list can lag a few seconds behind a create, so do not run it twice in quick succession on a first run.
+The script reads this file and creates the space `GreenHands BC: Vancouver 311`, or updates it if it already exists. Note the space list can lag a few seconds behind a create, so do not run it twice in quick succession on a first run.
 
 The script only finds spaces you can access. A teammate without access to the existing space would create a second one, so share the space with the team or ask its owner to re-run the script.
 

@@ -1,4 +1,4 @@
-// Block by Block API: what the React frontend (frontend/src/api/client.ts) calls.
+// GreenHands BC API: what the React frontend (frontend/src/api/client.ts) calls.
 // Run: npm --prefix app run api   (listens on http://localhost:8000; Vite forwards /api/* here)
 import { createHash } from 'node:crypto'
 import { dirname, join } from 'node:path'

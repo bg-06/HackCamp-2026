@@ -1,6 +1,6 @@
-# Block by Block: Project Plan (HackCamp 2026)
+# GreenHands BC: Project Plan (HackCamp 2026)
 
-Block by Block turns what's broken on your block into ways to help. A map built on Vancouver's 311 data shows where neighbourhoods need help, connects residents with City and local organisation volunteer events (or lets them start one from a hotspot), and lets neighbours vote on the fixes only the City can make.
+GreenHands BC turns what's broken on your block into ways to help. A map built on Vancouver's 311 data shows where neighbourhoods need help, connects residents with City and local organisation volunteer events (or lets them start one from a hotspot), and lets neighbours vote on the fixes only the City can make.
 
 - Event: HackCamp 2026 by nwPlus, UBC Vancouver, **24 hours**
 - Theme: identify a problem facing a community and build something that makes a meaningful difference
@@ -163,10 +163,10 @@ The list around the cards ("Ways to help this week"): sorted by date, an area pi
 
 ### Pitch: how we sell it
 
-**One line:** Block by Block turns what's broken on your block into ways to help.
+**One line:** GreenHands BC turns what's broken on your block into ways to help.
 
 **30-second version:**
-> Vancouver logs more than a quarter of a million 311 requests a year, and the same problems keep coming back to the same blocks: dumping, litter, clogged drains. Residents report them and wait. Meanwhile the City runs volunteer cleanup programs, and local groups are looking for volunteers, but it's all on separate forms and websites, and none of it points at where help is actually needed. Block by Block puts it on one map. It shows where the City's own data says your neighbourhood needs help, the volunteer events already happening nearby, and a one-tap way to start one. For the things only the City can fix, neighbours vote on what matters most and send that list to Council.
+> Vancouver logs more than a quarter of a million 311 requests a year, and the same problems keep coming back to the same blocks: dumping, litter, clogged drains. Residents report them and wait. Meanwhile the City runs volunteer cleanup programs, and local groups are looking for volunteers, but it's all on separate forms and websites, and none of it points at where help is actually needed. GreenHands BC puts it on one map. It shows where the City's own data says your neighbourhood needs help, the volunteer events already happening nearby, and a one-tap way to start one. For the things only the City can fix, neighbours vote on what matters most and send that list to Council.
 
 **The problem, in three beats**
 

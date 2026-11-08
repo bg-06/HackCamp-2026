@@ -78,7 +78,7 @@ const invalidTokenCodes = new Set([
 ])
 
 function unauthorized(res: Response, message: string, invalid = false) {
-  res.set('WWW-Authenticate', `Bearer realm="block-by-block"${invalid ? ', error="invalid_token"' : ''}`)
+  res.set('WWW-Authenticate', `Bearer realm="greenhands-bc"${invalid ? ', error="invalid_token"' : ''}`)
   res.status(401).json({ error: message })
 }
 

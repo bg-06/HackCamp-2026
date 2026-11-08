@@ -1,4 +1,4 @@
--- App tables for Block by Block. Safe to run more than once (IF NOT EXISTS everywhere).
+-- App tables for GreenHands BC. Safe to run more than once (IF NOT EXISTS everywhere).
 -- Databricks reads events (id, h3_r9, category, done_at) and votes (issue_id, value):
 -- never rename or drop those columns (databricks/sql/rankings.sql).
 

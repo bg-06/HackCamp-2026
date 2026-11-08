@@ -93,7 +93,7 @@ export default function SuggestionProfilePage() {
           <span className="avatar-xl" aria-hidden="true">
             {signedIn && picture ? <img src={picture} alt="" referrerPolicy="no-referrer" /> : initials}
           </span>
-          <p className="profile-handle">{signedIn ? `@${(name ?? "you").replace(/\s+/g, "")}` : "Block by Block"}</p>
+          <p className="profile-handle">{signedIn ? `@${(name ?? "you").replace(/\s+/g, "")}` : "GreenHands BC"}</p>
           <p className="profile-since">Neighbour in Vancouver</p>
           <p className="profile-badge">
             <MapPin size={20} aria-hidden="true" />

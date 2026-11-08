@@ -6,7 +6,7 @@ Run the TypeScript adapters with:
 npm --prefix app run ingest:volunteer-events
 ```
 
-Apply `app/db/migrations/004_volunteer_raw.sql` before running the command; it owns the `raw_volunteer_events` schema. The app migration from Step 5 must also be applied because normalized listings are upserted into `events`. External events keep their organiser's signup URL; Block by Block does not take registrations for them.
+Apply `app/db/migrations/004_volunteer_raw.sql` before running the command; it owns the `raw_volunteer_events` schema. The app migration from Step 5 must also be applied because normalized listings are upserted into `events`. External events keep their organiser's signup URL; GreenHands BC does not take registrations for them.
 
 ## Postgres landing table
 
@@ -67,6 +67,6 @@ A missing validation marker causes only that source to fail, preserving its prev
 
 - Respect `robots.txt` and source terms.
 - Use public event pages only; never scrape content behind login.
-- Keep the external `signup_url` and do not represent Block by Block as the organiser.
+- Keep the external `signup_url` and do not represent GreenHands BC as the organiser.
 - Deterministic IDs make refreshes idempotent. After a validated source refresh, missing active listings are soft-withdrawn with `source_withdrawn_at`; ended or completed events, comments, RSVPs and detail URLs are preserved. Reappearing listings clear the withdrawal timestamp and keep the same identity.
 - A source failure or malformed/unrecognized snapshot does not alter that source's previous state or block other adapters, but the command exits non-zero so scheduled jobs can alert.

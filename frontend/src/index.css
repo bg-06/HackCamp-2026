@@ -1,4 +1,4 @@
-/* Block by Block styles. Dark, image-led feed with a single blue interaction accent. */
+/* GreenHands BC styles. Dark, image-led feed with a single blue interaction accent. */
 
 :root {
   --blue: #2563eb;
@@ -71,8 +71,23 @@ body,
   height: 100%;
   margin: 0;
 }
+/* The document never scrolls: only .page-content does. Stops iOS rubber-banding and Android
+   pull-to-refresh from dragging the header and bottom nav around. */
+html,
+body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
 body {
   background: var(--surface-muted);
+}
+/* iOS zooms the page when a field under 16px gets focus, which shifts the whole screen and the nav */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1em) !important;
+  }
 }
 a {
   color: inherit;
@@ -101,9 +116,11 @@ button {
   white-space: nowrap;
 }
 
-/* Phone-width column, centred on desktop */
+/* Phone-width column, centred on desktop. Pinned to the viewport so nothing (document scroll,
+   overscroll bounce, browser toolbars) can move the shell or the nav at its bottom. */
 .app {
-  height: 100dvh;
+  position: fixed;
+  inset: 0;
   max-width: 440px;
   margin: 0 auto;
   display: flex;
@@ -118,7 +135,9 @@ button {
 }
 .page-content {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior-y: contain; /* reaching the end of a list doesn't bounce the whole app */
   padding: 16px 12px 24px;
   /* No scrollbar: phones don't show one, and on desktop it ate into the column */
   scrollbar-width: none;
@@ -814,13 +833,26 @@ a.tile:hover h3,
 
 /* ---------- Bottom navigation ---------- */
 .bottom-nav {
-  height: var(--nav-h);
+  /* Never shrinks; the home-indicator inset is added on top of the 60px, not taken out of it */
+  flex: none;
+  position: relative;
+  z-index: 5;
+  height: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px));
   display: flex;
   border-top: 1px solid var(--border);
   background: var(--surface);
-  padding-bottom: env(safe-area-inset-bottom);
+  padding: 0 env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+/* Hidden while the on-screen keyboard is up, so it never floats over the keyboard */
+.bottom-nav[data-keyboard='open'] {
+  display: none;
 }
 .bottom-nav a {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -833,6 +865,34 @@ a.tile:hover h3,
 .bottom-nav a.active {
   color: var(--blue-dark);
   font-weight: 700;
+}
+
+/* ---------- Jump to top ---------- */
+/* Sits just above the nav, inside the phone column (.app is the positioned ancestor) */
+.jump-to-top {
+  position: absolute;
+  right: calc(16px + env(safe-area-inset-right, 0px));
+  bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 16px);
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 25%);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  animation: jump-in 160ms ease-out;
+}
+@keyframes jump-in {
+  from { opacity: 0; transform: translateY(8px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .jump-to-top { animation: none; }
 }
 
 /* ---------- Profile ---------- */

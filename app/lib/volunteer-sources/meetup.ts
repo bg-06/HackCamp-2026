@@ -122,7 +122,7 @@ export class MeetupPublicPageAdapter implements VolunteerSourceAdapter {
       headers: {
         accept: 'text/html,application/xhtml+xml',
         'accept-language': 'en-CA,en;q=0.9',
-        'user-agent': 'BlockByBlock-Volunteer-Indexer/1.0 (+https://github.com/bg-06/HackCamp-2026)',
+        'user-agent': 'GreenHandsBC-Volunteer-Indexer/1.0 (+https://github.com/bg-06/HackCamp-2026)',
       },
       signal: AbortSignal.timeout(30_000),
     })
@@ -146,7 +146,7 @@ export class MeetupPublicPageAdapter implements VolunteerSourceAdapter {
     if (urls.size > 50) throw new Error(`${this.id}: too many event links; refusing incomplete collection`)
     for (const url of urls) {
       const eventResponse = await fetch(url, {
-        headers: { accept: 'text/html,application/xhtml+xml', 'user-agent': 'BlockByBlock-Volunteer-Indexer/1.0 (+https://github.com/bg-06/HackCamp-2026)' },
+        headers: { accept: 'text/html,application/xhtml+xml', 'user-agent': 'GreenHandsBC-Volunteer-Indexer/1.0 (+https://github.com/bg-06/HackCamp-2026)' },
         signal: AbortSignal.timeout(30_000),
       })
       if (!eventResponse.ok) throw new Error(`${this.id}: event page returned ${eventResponse.status}`)

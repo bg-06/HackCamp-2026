@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Block by Block API
+  title: GreenHands BC API
   version: 1.0.0
   description: |
     Volunteer events, city issues, RSVPs, votes and comments. Auth0 RS256 access

@@ -1,6 +1,6 @@
 # Next steps: a step-by-step guide (written 2026-11-08)
 
-This guide is for whoever builds the next parts of Block by Block, human or AI. Do the steps **in order**. Each step says who does it, what must be true before you start, exactly what to do, how to check it worked, and what to do if it didn't.
+This guide is for whoever builds the next parts of GreenHands BC, human or AI. Do the steps **in order**. Each step says who does it, what must be true before you start, exactly what to do, how to check it worked, and what to do if it didn't.
 
 The big picture is in [plan.md](../plan.md). Read plan.md section 0 ("Product direction") once before step 1. You don't need the rest of plan.md unless a step points to it.
 
@@ -267,7 +267,7 @@ The big picture is in [plan.md](../plan.md). Read plan.md section 0 ("Product di
 - **Before you start:** step 8 is merged.
 - **Do:**
   1. Bring the frontend onto `main`: open a PR from `frontend-mock` into `main` on GitHub, check it only adds the `frontend/` folder, and merge it. Then `git switch main && git pull`.
-  2. Create the branch `step-9-frontend`. In `frontend/package.json`, change `"name": "scholarreel-frontend"` to `"name": "block-by-block-frontend"`.
+  2. Create the branch `step-9-frontend`. In `frontend/package.json`, change `"name": "scholarreel-frontend"` to `"name": "greenhands-bc-frontend"`.
   3. Install and configure:
      ```bash
      npm --prefix frontend install
@@ -300,7 +300,7 @@ The big picture is in [plan.md](../plan.md). Read plan.md section 0 ("Product di
 - **Before you start:** step 9 is merged.
 - **Do:**
   1. **Auth0 dashboard: Application.** Applications → Create Application → name `blockbyblock-web`, type **Single Page Application**. In its settings set Allowed Callback URLs, Allowed Logout URLs and Allowed Web Origins to `http://localhost:5173` (add the deployed URL later). Under Connections, turn on Google.
-  2. **Auth0 dashboard: API.** Applications → APIs → Create API → name `Block by Block API`, identifier `https://api.blockbyblock`.
+  2. **Auth0 dashboard: API.** Applications → APIs → Create API → name `GreenHands BC API`, identifier `https://api.blockbyblock`.
   3. Note the Auth0 domain (like `something.us.auth0.com`), the application's Client ID, and the API identifier. These aren't secret, but keep them in `.env` files, not in code.
   4. **Frontend:**
      ```bash
