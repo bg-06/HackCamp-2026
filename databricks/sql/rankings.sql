@@ -3,17 +3,17 @@
 -- Each statement is skipped by the notebook if the Postgres table it needs doesn't exist yet.
 
 -- @requires bbb_app.public.votes
--- Track 2 issues + resident votes, ranked per area (Genie, dashboard, "Send this list to Council").
+-- Track 2 issues + resident upvotes, ranked per area. Legacy downvotes are ignored.
 -- Postgres votes: issue_id text, value smallint (+1 / -1).
 CREATE OR REPLACE TABLE bbb.gold.issue_priority
 COMMENT 'Track 2 issues with votes, ranked within each local area'
 AS SELECT *, rank() OVER (PARTITION BY local_area ORDER BY score DESC) AS area_rank
 FROM (
-  SELECT i.*, coalesce(v.up, 0) AS up_votes, coalesce(v.down, 0) AS down_votes,
-         i.base_score + 3 * (coalesce(v.up, 0) - coalesce(v.down, 0)) AS score
+  SELECT i.*, coalesce(v.up, 0) AS up_votes, 0 AS down_votes,
+         i.base_score + 3 * coalesce(v.up, 0) AS score
   FROM bbb.gold.track2_issues i
   LEFT JOIN (
-    SELECT issue_id, count_if(value = 1) AS up, count_if(value = -1) AS down
+    SELECT issue_id, count_if(value = 1) AS up
     FROM bbb_app.public.votes GROUP BY issue_id
   ) v USING (issue_id)
 );
