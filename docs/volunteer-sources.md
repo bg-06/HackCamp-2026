@@ -18,9 +18,9 @@ Apply `app/db/migrations/004_volunteer_raw.sql` before running the command; it o
 
 ## Current adapters
 
-### Curated City of Vancouver programs
+### Retired City of Vancouver program list
 
-`data/seed/city_volunteer_opportunities.json` contains stable, ongoing opportunities linked to official City pages. The City volunteering index is protected by Cloudflare and is an index of programs rather than an event feed, so these entries are intentionally curated and reviewed instead of scraped.
+The five broad entries in `data/seed/city_volunteer_opportunities.json` are no longer published because they were manually curated, lacked program images, and were less useful than organization-backed opportunities. Ingestion soft-withdraws their existing rows so old links and related data remain intact.
 
 ### Green Teams of Canada official site
 

@@ -3,7 +3,7 @@ import { config } from 'dotenv'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { downloadVolunteerImage, type DownloadedImage } from '../lib/volunteer-sources/image-download.js'
-import { volunteerSources, type VolunteerListing } from '../lib/volunteer-sources/index.js'
+import { retiredVolunteerSourceIds, volunteerSources, type VolunteerListing } from '../lib/volunteer-sources/index.js'
 import { GreenTeamsActivitiesAdapter, type RawVolunteerRecord } from '../lib/volunteer-sources/green-teams.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -133,6 +133,13 @@ try {
   }
 
   await ensureAppSchema()
+  for (const sourceId of retiredVolunteerSourceIds) {
+    const result = await sql`
+      UPDATE events
+      SET source_withdrawn_at = now()
+      WHERE created_by = ${`source:${sourceId}`} AND source_withdrawn_at IS NULL AND done_at IS NULL`
+    console.log(`${sourceId}: retired ${result.count} listings`)
+  }
   for (const source of volunteerSources) {
     try {
       const snapshot = await source.fetchListings()
