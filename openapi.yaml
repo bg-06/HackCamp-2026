@@ -180,7 +180,7 @@ paths:
         '500': {$ref: '#/components/responses/ServerError'}
   /issues:
     get:
-      summary: List issues ordered by base score plus three times all upvotes
+      summary: List issues ordered by base score plus all upvotes
       parameters:
         - name: area
           in: query
@@ -514,7 +514,7 @@ components:
         up_votes: {type: integer, description: Upvotes excluding the caller's vote.}
         down_votes: {type: integer, const: 0, description: Compatibility field; legacy downvotes are ignored.}
         my_vote: {type: integer, enum: [0, 1]}
-        score: {type: number, description: base_score plus 3 times all upvotes, including the caller}
+        score: {type: number, description: base_score plus 1 per upvote, including the caller}
         comment_count: {type: integer}
         lat: {type: number}
         lng: {type: number}

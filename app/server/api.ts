@@ -105,7 +105,7 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
              count(*) FILTER (WHERE v.value = 1 AND (${user}::text IS NULL OR v.user_id IS DISTINCT FROM ${user}))::int AS up_votes,
              0::int AS down_votes,
              coalesce(max(v.value) FILTER (WHERE v.user_id = ${user} AND v.value = 1), 0)::int AS my_vote,
-             coalesce(i.base_score, 0)::float8 + 3 * count(*) FILTER (WHERE v.value = 1) AS score,
+             coalesce(i.base_score, 0)::float8 + count(*) FILTER (WHERE v.value = 1) AS score,
              (count(*) FILTER (WHERE v.value = 1 AND v.created_at >= now() - interval '7 days') +
               (SELECT count(*) FROM comments c WHERE c.issue_id = i.issue_id AND NOT c.hidden AND c.created_at >= now() - interval '7 days'))::int AS recent_activity,
              (SELECT count(*)::int FROM comments c WHERE c.issue_id = i.issue_id AND NOT c.hidden) AS comment_count

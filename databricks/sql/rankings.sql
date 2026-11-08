@@ -10,7 +10,7 @@ COMMENT 'Track 2 issues with votes, ranked within each local area'
 AS SELECT *, rank() OVER (PARTITION BY local_area ORDER BY score DESC) AS area_rank
 FROM (
   SELECT i.*, coalesce(v.up, 0) AS up_votes, 0 AS down_votes,
-         i.base_score + 3 * coalesce(v.up, 0) AS score
+         i.base_score + coalesce(v.up, 0) AS score
   FROM bbb.gold.track2_issues i
   LEFT JOIN (
     SELECT issue_id, count_if(value = 1) AS up

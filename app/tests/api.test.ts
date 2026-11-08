@@ -199,7 +199,7 @@ test('legacy downvotes do not lower scores; scores include all upvotes and comme
   await sql`INSERT INTO comments (issue_id, user_id, body) VALUES ('issue-2', 'bob', 'One'), ('issue-2', 'bob', 'Two')`
   const result = await request('/issues')
   assert.equal(result.body[0].issue_id, 'issue-2')
-  assert.equal(result.body[0].score, 13)
+  assert.equal(result.body[0].score, 11)
   assert.equal(result.body[0].up_votes, 0)
   assert.equal(result.body[0].my_vote, 1)
   assert.equal(result.body[0].comment_count, 2)

@@ -68,8 +68,8 @@ There is no daily reset. See `frontend/README.md` for the comparison and discove
 
 Issue responses keep `up_votes` excluding the caller and `my_vote` as 0/1 to preserve
 the existing frontend convention. `down_votes` is always 0. New `score` includes
-**all** upvotes: `base_score + 3 * total_up_votes`. Lists sort by that score. The
-frontend can use returned `score`, or compute `base_score + 3 * (up_votes + my_vote)`.
+**all** upvotes: `base_score + total_up_votes`. Lists sort by that score. The
+frontend can use returned `score`, or compute `base_score + up_votes + my_vote`.
 Event `commentCount` and issue `comment_count` are returned without multiplying votes.
 
 ## Authenticated identity
