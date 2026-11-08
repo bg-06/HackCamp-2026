@@ -8,8 +8,11 @@ import { PGLiteSocketServer } from '@electric-sql/pglite-socket'
 import postgres from 'postgres'
 import { latLngToCell } from 'h3-js'
 import { createApp } from '../server/api.js'
+import { createAuthMiddleware } from '../server/auth.js'
+import { authFixture } from './auth-fixture.js'
 
 let db: PGlite, socket: PGLiteSocketServer, sql: ReturnType<typeof postgres>, http: Server, base: string
+let identity: Awaited<ReturnType<typeof authFixture>>
 const cell = latLngToCell(49.26, -123.1, 9)
 const hotspotId = `${cell}|Loose Litter Clean Up Case`
 const migrations = fileURLToPath(new URL('../../db/migrations/', import.meta.url))
@@ -23,7 +26,8 @@ before(async () => {
   sql = postgres(`postgres://postgres:postgres@${socket.getServerConn()}/postgres`, {
     ssl: false, max: 4, idle_timeout: 0, onnotice: () => {},
   })
-  http = createApp(sql).listen(0, '127.0.0.1')
+  identity = await authFixture()
+  http = createApp(sql, createAuthMiddleware(identity.settings, identity.keys)).listen(0, '127.0.0.1')
   await new Promise<void>(resolve => http.once('listening', resolve))
   const address = http.address()
   assert.ok(address && typeof address === 'object')
@@ -51,7 +55,9 @@ beforeEach(async () => {
 })
 
 async function request(path: string, method = 'GET', body?: unknown, user = 'alice') {
-  const response = await fetch(base + path, { method, headers: { 'content-type': 'application/json', 'x-demo-user': user },
+  const response = await fetch(base + path, { method, headers: {
+    'content-type': 'application/json', authorization: `Bearer ${await identity.sign(user)}`, 'x-demo-user': 'forged-user',
+  },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(10000) })
   const text = await response.text()
   const value = text ? JSON.parse(text) : undefined
@@ -72,6 +78,32 @@ test('hotspots expose stable IDs, coordinates, area filtering and timestamp inst
   assert.ok(result.body[0].last_reported.endsWith('Z'))
   assert.deepEqual((await request('/hotspots?area=Elsewhere')).body, [])
   assert.equal((await request('/hotspots?limit=1.5')).status, 400)
+})
+
+test('anonymous browsing includes all votes and RSVPs without exposing personal flags', async () => {
+  const created = await request('/events', 'POST', eventInput())
+  await request('/issues/issue-1/vote', 'PUT', { value: 1 })
+  const eventResponse = await fetch(base + `/events/${created.body.id}`, { headers: { 'x-demo-user': 'alice' } })
+  const event = await eventResponse.json()
+  assert.equal(event.going, false)
+  assert.equal(event.spotsTaken, 1)
+  const issue = await (await fetch(base + '/issues/issue-1', { headers: { 'x-demo-user': 'alice' } })).json()
+  assert.equal(issue.my_vote, 0)
+  assert.equal(issue.up_votes, 1)
+})
+
+test('unauthenticated writes and personal reads cannot use the demo identity or touch the database', async () => {
+  for (const [path, method] of [['/events', 'POST'], ['/events/anything/done', 'POST'],
+    ['/events/anything/rsvp', 'POST'], ['/events/anything/rsvp', 'DELETE'],
+    ['/issues/issue-1/vote', 'PUT'], ['/issues/issue-1/vote', 'DELETE'],
+    ['/events/anything/comments', 'POST'], ['/issues/issue-1/comments', 'POST'],
+    ['/me/history', 'GET'], ['/me/votes', 'GET']]) {
+    const response = await fetch(base + path, { method, headers: { 'x-demo-user': 'alice' } })
+    assert.equal(response.status, 401, path)
+    await response.arrayBuffer()
+  }
+  assert.equal((await sql`SELECT count(*)::int AS n FROM vote_daily_usage`)[0]!.n, 0)
+  assert.equal((await sql`SELECT count(*)::int AS n FROM events`)[0]!.n, 0)
 })
 
 test('event creation trusts hotspot data and atomically RSVPs its host', async () => {

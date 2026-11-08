@@ -1,15 +1,11 @@
 // Block by Block API: what the React frontend calls (frontend/src/api/client.ts).
 // Response shapes match frontend/src/types.ts: VolunteerEvent, Track2Issue, Comment.
 // Run: npm --prefix app run api   (http://localhost:8000; Vite forwards /api/* here)
-import express, { type NextFunction, type Request, type Response } from 'express'
+import express, { type NextFunction, type Request, type Response, type RequestHandler } from 'express'
 import { cellToLatLng, isValidCell, latLngToCell, getResolution } from 'h3-js'
 import type { Sql, TransactionSql } from 'postgres'
 import { parseNewEvent, ApiError, pageLimit } from './validation.js'
-
-// TEMPORARY: who is calling. Replaced by the Auth0 token check (guide step 10).
-function userId(req: Request): string {
-  return req.header('x-demo-user') ?? 'demo-user'
-}
+import { userId, viewerId } from './auth.js'
 
 function centre(h3: string | null): { lat?: number; lng?: number } {
   if (!h3 || !isValidCell(h3)) return {}
@@ -19,7 +15,7 @@ function centre(h3: string | null): { lat?: number; lng?: number } {
 
 const iso = (d: Date | null) => (d ? d.toISOString() : undefined)
 
-export function createApp(sql: Sql) {
+export function createApp(sql: Sql, authentication: RequestHandler) {
 
   // ---------- Track 1: volunteer events ----------
 
@@ -34,13 +30,13 @@ export function createApp(sql: Sql) {
   }
 
   // spots_taken leaves out the caller's own RSVP; that is `going` (see types.ts).
-  function eventQuery(user: string, where: ReturnType<typeof sql>) {
+  function eventQuery(user: string | null, where: ReturnType<typeof sql>) {
     return sql<EventRow[]>`
       SELECT e.id, e.kind, e.title, e.organiser, e.category, e.starts_at, e.ends_at, e.location,
              e.local_area, e.spots_total, e.what_to_bring, e.signup_url, e.is_sample,
              e.latitude, e.longitude, e.h3_r9, e.created_at, e.created_by, e.done_at, e.hotspot_id, e.source_withdrawn_at,
              (SELECT count(*)::int FROM comments c WHERE c.event_id = e.id AND NOT c.hidden) AS comment_count,
-             count(r.user_id) FILTER (WHERE r.user_id <> ${user})::int AS spots_taken,
+             count(r.user_id) FILTER (WHERE ${user}::text IS NULL OR r.user_id <> ${user})::int AS spots_taken,
              coalesce(bool_or(r.user_id = ${user}), false) AS going,
              h.request_type AS hs_request_type, h.times_reported::int AS hs_times_reported,
              h.months_seen::int AS hs_months_seen
@@ -93,11 +89,11 @@ export function createApp(sql: Sql) {
   }
 
   // up_votes / down_votes leave out the caller's own vote; that is my_vote (see types.ts).
-  function issueQuery(user: string, where: ReturnType<typeof sql>, limit: number) {
+  function issueQuery(user: string | null, where: ReturnType<typeof sql>, limit: number) {
     return sql<IssueRow[]>`
       SELECT i.issue_id, i.h3_r9, i.request_type, i.category, i.local_area, i.address,
              i.open_cases::int, i.days_open::int, i.times_reported_12m::int, i.base_score::float8 AS base_score,
-             count(*) FILTER (WHERE v.value = 1 AND v.user_id IS DISTINCT FROM ${user})::int AS up_votes,
+             count(*) FILTER (WHERE v.value = 1 AND (${user}::text IS NULL OR v.user_id IS DISTINCT FROM ${user}))::int AS up_votes,
              0::int AS down_votes,
              coalesce(max(v.value) FILTER (WHERE v.user_id = ${user} AND v.value = 1), 0)::int AS my_vote,
              coalesce(i.base_score, 0)::float8 + 3 * count(*) FILTER (WHERE v.value = 1) AS score,
@@ -150,6 +146,7 @@ export function createApp(sql: Sql) {
   // ---------- Routes ----------
 
   const app = express()
+  app.use(authentication)
   app.use(express.json())
 
   type BudgetRow = { vote_day: string; votes_used: number; resets_at: Date }
@@ -271,7 +268,7 @@ export function createApp(sql: Sql) {
 
   // Active upcoming dated events plus supported ongoing external opportunities.
   app.get('/events', async (req, res) => {
-    const rows = await eventQuery(userId(req), sql`
+    const rows = await eventQuery(viewerId(req), sql`
       e.source_withdrawn_at IS NULL AND e.done_at IS NULL AND (
         e.starts_at >= now() - interval '1 day'
         OR (e.starts_at IS NULL AND e.ends_at IS NULL AND e.kind IN ('city', 'org') AND e.signup_url IS NOT NULL)
@@ -281,7 +278,7 @@ export function createApp(sql: Sql) {
   })
 
   app.get('/events/:id', async (req, res) => {
-    const [row] = await eventQuery(userId(req), sql`
+    const [row] = await eventQuery(viewerId(req), sql`
       e.id = ${req.params.id} AND (
         e.starts_at IS NOT NULL
         OR (e.starts_at IS NULL AND e.ends_at IS NULL AND e.kind IN ('city', 'org') AND e.signup_url IS NOT NULL)
@@ -295,12 +292,12 @@ export function createApp(sql: Sql) {
   app.get('/issues', async (req, res) => {
     const area = typeof req.query.area === 'string' ? req.query.area : null
     const limit = pageLimit(req.query.limit)
-    const rows = await issueQuery(userId(req), area ? sql`i.local_area = ${area}` : sql`true`, limit)
+    const rows = await issueQuery(viewerId(req), area ? sql`i.local_area = ${area}` : sql`true`, limit)
     res.json(rows.map(toIssue))
   })
 
   app.get('/issues/:id', async (req, res) => {
-    const [row] = await issueQuery(userId(req), sql`i.issue_id = ${req.params.id}`, 1)
+    const [row] = await issueQuery(viewerId(req), sql`i.issue_id = ${req.params.id}`, 1)
     if (!row) return void res.status(404).json({ error: 'issue not found' })
     res.json(toIssue(row))
   })

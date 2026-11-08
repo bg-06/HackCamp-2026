@@ -3,19 +3,25 @@ info:
   title: Block by Block API
   version: 1.0.0
   description: |
-    Volunteer events, city issues, RSVPs, votes and comments. The optional
-    x-demo-user header selects the caller and defaults to demo-user. This is a
-    temporary identity mechanism, not authentication. Database failures return 500.
+    Volunteer events, city issues, RSVPs, votes and comments. Auth0 RS256 access
+    tokens identify the caller. Public reads are anonymous unless a token is sent;
+    writes and personal reads require a token. X-Demo-User is ignored. Invalid
+    tokens return 401, machine tokens 403, and key-service outages 503.
 servers:
   - url: http://localhost:8000
     description: Local API
   - url: /api
     description: Vite development proxy
+security:
+  - {}
+  - BearerAuth: []
 paths:
   /health:
     get:
       summary: Check API and database connectivity
       responses:
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/AuthUnavailable'}
         '200':
           description: Database is reachable
           content:
@@ -27,11 +33,12 @@ paths:
                   ok: {type: boolean, const: true}
         '500': {$ref: '#/components/responses/ServerError'}
   /events:
-    parameters: [{$ref: '#/components/parameters/DemoUser'}]
     get:
       summary: List upcoming events
       description: Active, incomplete upcoming events plus supported ongoing external opportunities, ordered by start time.
       responses:
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/AuthUnavailable'}
         '200':
           description: Events
           content:
@@ -39,6 +46,7 @@ paths:
               schema: {type: array, items: {$ref: '#/components/schemas/Event'}}
         '500': {$ref: '#/components/responses/ServerError'}
     post:
+      security: [{BearerAuth: []}]
       summary: Create an in-app volunteer event and RSVP its host
       description: Hotspot location/category are authoritative when hotspotId is supplied. Manual events require Vancouver coordinates, a known category and local area. Caller identity determines the host.
       requestBody:
@@ -47,6 +55,8 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/NewEvent'}
       responses:
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/AuthUnavailable'}
         '201':
           description: Created event; the host is already going
           content:
@@ -63,6 +73,8 @@ paths:
         - {name: area, in: query, schema: {type: string}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 5000, default: 5000}}
       responses:
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/AuthUnavailable'}
         '200':
           description: Most reported first, with H3 cell centres
           content:
@@ -71,10 +83,12 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '500': {$ref: '#/components/responses/ServerError'}
   /me/votes:
-    parameters: [{$ref: '#/components/parameters/DemoUser'}]
     get:
+      security: [{BearerAuth: []}]
       summary: Get remaining votes for the caller's Vancouver calendar day
       responses:
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/AuthUnavailable'}
         '200':
           description: Daily allowance and next reset instant
           content:
@@ -82,11 +96,13 @@ paths:
               schema: {$ref: '#/components/schemas/VoteBudget'}
         '500': {$ref: '#/components/responses/ServerError'}
   /me/history:
-    parameters: [{$ref: '#/components/parameters/DemoUser'}]
     get:
+      security: [{BearerAuth: []}]
       summary: List completed events the caller RSVP'd to
       description: Hours are duration estimates capped at completion time, not verified attendance. Future and incomplete events do not earn hours.
       responses:
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/AuthUnavailable'}
         '200':
           description: Completed event history, newest first
           content:
@@ -94,8 +110,9 @@ paths:
               schema: {type: array, items: {$ref: '#/components/schemas/VolunteerRecord'}}
         '500': {$ref: '#/components/responses/ServerError'}
   /events/{id}/done:
-    parameters: [{$ref: '#/components/parameters/Id'}, {$ref: '#/components/parameters/DemoUser'}]
+    parameters: [{$ref: '#/components/parameters/Id'}]
     post:
+      security: [{BearerAuth: []}]
       summary: Complete an in-app event as its host
       description: Uses server completion time; cannot complete an event before it starts. Repeats retain the original completion and counts. Databricks picks this up on its scheduled refresh.
       requestBody:
@@ -108,6 +125,8 @@ paths:
                 bagsCollected: {type: integer, minimum: 0, maximum: 10000}
                 afterPhotoUrl: {type: string, format: uri, description: HTTPS only}
       responses:
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/AuthUnavailable'}
         '200':
           description: Completed event
           content:
@@ -119,10 +138,12 @@ paths:
         '409': {description: Event has not started, is withdrawn, or is external}
         '500': {$ref: '#/components/responses/ServerError'}
   /events/{id}:
-    parameters: [{$ref: '#/components/parameters/Id'}, {$ref: '#/components/parameters/DemoUser'}]
+    parameters: [{$ref: '#/components/parameters/Id'}]
     get:
       summary: Get an event
       responses:
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/AuthUnavailable'}
         '200':
           description: Event
           content:
@@ -131,11 +152,14 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '500': {$ref: '#/components/responses/ServerError'}
   /events/{id}/rsvp:
-    parameters: [{$ref: '#/components/parameters/Id'}, {$ref: '#/components/parameters/DemoUser'}]
+    parameters: [{$ref: '#/components/parameters/Id'}]
     post:
+      security: [{BearerAuth: []}]
       summary: RSVP to an in-app event
       description: Idempotent for an existing RSVP. Events without capacity use an external signup site. Completed/withdrawn events reject new RSVPs and cannot be overbooked by parallel requests.
       responses:
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/AuthUnavailable'}
         '204': {description: RSVP recorded}
         '404': {$ref: '#/components/responses/NotFound'}
         '409':
@@ -145,14 +169,16 @@ paths:
               schema: {$ref: '#/components/schemas/Error'}
         '500': {$ref: '#/components/responses/ServerError'}
     delete:
+      security: [{BearerAuth: []}]
       summary: Remove your RSVP
       description: Succeeds even if no RSVP exists. Completed-event attendance is retained and returns 409.
       responses:
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/AuthUnavailable'}
         '204': {description: RSVP removed}
         '409': {description: Completed event attendance cannot be removed}
         '500': {$ref: '#/components/responses/ServerError'}
   /issues:
-    parameters: [{$ref: '#/components/parameters/DemoUser'}]
     get:
       summary: List issues ordered by base score plus three times all upvotes
       parameters:
@@ -165,6 +191,8 @@ paths:
           description: Maximum results; clamped to 1–5000, default 5000.
           schema: {type: integer, minimum: 1, maximum: 5000, default: 5000}
       responses:
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/AuthUnavailable'}
         '200':
           description: Issues
           content:
@@ -172,10 +200,12 @@ paths:
               schema: {type: array, items: {$ref: '#/components/schemas/Issue'}}
         '500': {$ref: '#/components/responses/ServerError'}
   /issues/{id}:
-    parameters: [{$ref: '#/components/parameters/Id'}, {$ref: '#/components/parameters/DemoUser'}]
+    parameters: [{$ref: '#/components/parameters/Id'}]
     get:
       summary: Get an issue
       responses:
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/AuthUnavailable'}
         '200':
           description: Issue
           content:
@@ -184,8 +214,9 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '500': {$ref: '#/components/responses/ServerError'}
   /issues/{id}/vote:
-    parameters: [{$ref: '#/components/parameters/Id'}, {$ref: '#/components/parameters/DemoUser'}]
+    parameters: [{$ref: '#/components/parameters/Id'}]
     put:
+      security: [{BearerAuth: []}]
       summary: Upvote an issue
       description: Two new casts per user per Vancouver calendar day. Repeating an active upvote is idempotent. Removing and recasting consumes another allowance.
       requestBody:
@@ -198,6 +229,8 @@ paths:
               properties:
                 value: {type: integer, const: 1}
       responses:
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/AuthUnavailable'}
         '200':
           description: Vote recorded, with remaining daily allowance
           content:
@@ -213,9 +246,12 @@ paths:
                 allOf: [{$ref: '#/components/schemas/Error'}, {$ref: '#/components/schemas/VoteBudget'}]
         '500': {$ref: '#/components/responses/ServerError'}
     delete:
+      security: [{BearerAuth: []}]
       summary: Remove your vote
       description: Succeeds even if no vote exists. Removing never refunds the daily allowance.
       responses:
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/AuthUnavailable'}
         '200':
           description: Vote removed, with unchanged daily allowance
           content:
@@ -223,11 +259,13 @@ paths:
               schema: {$ref: '#/components/schemas/VoteResult'}
         '500': {$ref: '#/components/responses/ServerError'}
   /events/{id}/comments:
-    parameters: [{$ref: '#/components/parameters/Id'}, {$ref: '#/components/parameters/DemoUser'}]
+    parameters: [{$ref: '#/components/parameters/Id'}]
     get: &commentsGet
       summary: List visible comments, oldest first
       description: Returns an empty list if no comments exist.
       responses:
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/AuthUnavailable'}
         '200':
           description: Comments
           content:
@@ -235,6 +273,7 @@ paths:
               schema: {type: array, items: {$ref: '#/components/schemas/Comment'}}
         '500': {$ref: '#/components/responses/ServerError'}
     post: &commentsPost
+      security: [{BearerAuth: []}]
       summary: Add a comment
       requestBody:
         required: true
@@ -250,6 +289,8 @@ paths:
                   maxLength: 2000
                   description: Trimmed before validation and storage; must contain 1–2000 characters after trimming.
       responses:
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/AuthUnavailable'}
         '201':
           description: Comment created
           content:
@@ -259,10 +300,16 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '500': {$ref: '#/components/responses/ServerError'}
   /issues/{id}/comments:
-    parameters: [{$ref: '#/components/parameters/Id'}, {$ref: '#/components/parameters/DemoUser'}]
+    parameters: [{$ref: '#/components/parameters/Id'}]
     get: *commentsGet
     post: *commentsPost
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Auth0 RS256 access token for the configured API audience
   parameters:
     Id:
       name: id
@@ -270,12 +317,13 @@ components:
       required: true
       description: Event or issue identifier
       schema: {type: string}
-    DemoUser:
-      name: x-demo-user
-      in: header
-      description: Temporary caller ID, not an authentication mechanism.
-      schema: {type: string, default: demo-user}
   responses:
+    Unauthorized:
+      description: Missing or invalid access token; includes a Bearer WWW-Authenticate challenge
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    AuthUnavailable:
+      description: Authentication key service unavailable; request was not authorized
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     BadRequest:
       description: Invalid request
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
