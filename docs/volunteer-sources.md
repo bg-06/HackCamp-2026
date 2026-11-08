@@ -35,5 +35,5 @@ The adapter reads only the public group events HTML and schema.org JSON-LD. It d
 - Respect `robots.txt` and source terms.
 - Use public event pages only; never scrape content behind login.
 - Keep the external `signup_url` and do not represent Block by Block as the organiser.
-- Deterministic IDs make refreshes idempotent; after a successful source refresh, listings removed by that source are removed locally too.
-- A source failure does not block other adapters, but the command exits non-zero so scheduled jobs can alert.
+- Deterministic IDs make refreshes idempotent. After a validated source refresh, missing active listings are soft-withdrawn with `source_withdrawn_at`; ended or completed events, comments, RSVPs and detail URLs are preserved. Reappearing listings clear the withdrawal timestamp and keep the same identity.
+- A source failure or malformed/unrecognized snapshot does not alter that source's previous state or block other adapters, but the command exits non-zero so scheduled jobs can alert.

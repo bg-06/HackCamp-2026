@@ -1,5 +1,5 @@
 import { load } from 'cheerio'
-import type { VolunteerListing, VolunteerSourceAdapter } from './types.js'
+import type { VolunteerListing, VolunteerSnapshot, VolunteerSourceAdapter } from './types.js'
 
 type JsonLdEvent = {
   '@type'?: string
@@ -34,6 +34,53 @@ function eventKey(url: string): string {
   return match?.[1] ?? new URL(url).pathname.replace(/^\/|\/$/g, '').replaceAll('/', '-')
 }
 
+export function parseMeetupListings(html: string, sourceId: string, fallbackOrganiser: string, now = Date.now()): VolunteerSnapshot {
+  const $ = load(html)
+  const events: JsonLdEvent[] = []
+  $('script[type="application/ld+json"]').each((_index, script) => {
+    try {
+      events.push(...flattenJsonLd(JSON.parse($(script).text())))
+    } catch {
+      // Ignore unrelated metadata blocks; validation below rejects an unrecognized page.
+    }
+  })
+
+  const pageText = $('body').text().replace(/\s+/g, ' ')
+  const hasEventsHeading = $('h1, h2, h3').toArray().some((heading) => $(heading).text().trim() === 'Events')
+  const hasEventLinks = $('a[href*="/events/"]').length > 0
+  const confirmedEmpty = hasEventsHeading && (/\b0\s*List\b/i.test(pageText) || !hasEventLinks)
+  if (!events.length && !confirmedEmpty) {
+    throw new Error(`${sourceId}: page did not contain event metadata or a confirmed empty event count`)
+  }
+
+  const seen = new Set<string>()
+  const listings = events.flatMap((event): VolunteerListing[] => {
+    if (!event.name || !event.startDate || !event.url) return []
+    if (new Date(event.endDate ?? event.startDate).getTime() < now) return []
+    const sourceKey = eventKey(event.url)
+    if (seen.has(sourceKey)) return []
+    seen.add(sourceKey)
+    return [{
+      source: sourceId,
+      sourceKey,
+      kind: 'org',
+      title: event.name,
+      organiser: event.organizer?.name ?? fallbackOrganiser,
+      category: 'Parks and Trees',
+      startsAt: event.startDate,
+      endsAt: event.endDate ?? null,
+      location: locationText(event.location),
+      localArea: null,
+      latitude: null,
+      longitude: null,
+      spotsTotal: event.maximumAttendeeCapacity ?? null,
+      whatToBring: null,
+      signupUrl: event.url,
+    }]
+  })
+  return { listings, validated: true }
+}
+
 export class MeetupPublicPageAdapter implements VolunteerSourceAdapter {
   readonly id: string
 
@@ -45,7 +92,7 @@ export class MeetupPublicPageAdapter implements VolunteerSourceAdapter {
     this.id = id
   }
 
-  async fetchListings(): Promise<VolunteerListing[]> {
+  async fetchListings(): Promise<VolunteerSnapshot> {
     const response = await fetch(this.groupUrl, {
       headers: {
         accept: 'text/html,application/xhtml+xml',
@@ -56,41 +103,6 @@ export class MeetupPublicPageAdapter implements VolunteerSourceAdapter {
     })
     if (!response.ok) throw new Error(`${this.id}: ${response.status} ${response.statusText}`)
 
-    const $ = load(await response.text())
-    const events: JsonLdEvent[] = []
-    $('script[type="application/ld+json"]').each((_index, script) => {
-      try {
-        events.push(...flattenJsonLd(JSON.parse($(script).text())))
-      } catch {
-        // Ignore unrelated or malformed metadata blocks.
-      }
-    })
-
-    const now = Date.now()
-    const seen = new Set<string>()
-    return events.flatMap((event): VolunteerListing[] => {
-      if (!event.name || !event.startDate || !event.url) return []
-      if (new Date(event.endDate ?? event.startDate).getTime() < now) return []
-      const sourceKey = eventKey(event.url)
-      if (seen.has(sourceKey)) return []
-      seen.add(sourceKey)
-      return [{
-        source: this.id,
-        sourceKey,
-        kind: 'org',
-        title: event.name,
-        organiser: event.organizer?.name ?? this.organiser,
-        category: 'Parks and Trees',
-        startsAt: event.startDate,
-        endsAt: event.endDate ?? null,
-        location: locationText(event.location),
-        localArea: null,
-        latitude: null,
-        longitude: null,
-        spotsTotal: event.maximumAttendeeCapacity ?? null,
-        whatToBring: null,
-        signupUrl: event.url,
-      }]
-    })
+    return parseMeetupListings(await response.text(), this.id, this.organiser)
   }
 }

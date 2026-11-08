@@ -14,6 +14,7 @@
     "ingest:volunteer-events": "tsc && node dist/scripts/ingest-volunteer-events.js",
     "ingest:status": "tsc && node dist/scripts/ingest.js status",
     "api": "tsc && node dist/server/index.js",
+    "test": "tsc && node --test dist/tests/*.test.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -16,7 +16,12 @@ export type VolunteerListing = {
   signupUrl: string
 }
 
+export type VolunteerSnapshot = {
+  listings: VolunteerListing[]
+  validated: true
+}
+
 export type VolunteerSourceAdapter = {
   id: string
-  fetchListings(): Promise<VolunteerListing[]>
+  fetchListings(): Promise<VolunteerSnapshot>
 }

@@ -53,17 +53,19 @@ async function ensureAppSchema(): Promise<void> {
   const [row] = await sql<{ exists: boolean }[]>`
     SELECT EXISTS (
       SELECT 1 FROM information_schema.columns
-      WHERE table_schema = 'public' AND table_name = 'events' AND column_name = 'signup_url'
+      WHERE table_schema = 'public' AND table_name = 'events' AND column_name = 'source_withdrawn_at'
     ) AS exists
   `
   if (!row?.exists) {
-    throw new Error('The app events schema is missing. Merge/apply Step 5 migration 002_app.sql before normalized event ingest; db:migrate on this branch only installs ingest tables.')
+    throw new Error('The external event schema is missing. Apply migrations 002_app.sql and 005_event_source_withdrawal.sql before normalized event ingest.')
   }
 }
 
-async function upsert(listing: VolunteerListing): Promise<string> {
+type QueryTag = (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown>
+
+async function upsert(tx: QueryTag, listing: VolunteerListing): Promise<string> {
   const id = listingId(listing)
-  await sql`
+  await tx`
     INSERT INTO events (
       id, kind, title, organiser, category, starts_at, ends_at, location, local_area,
       latitude, longitude, spots_total, what_to_bring, signup_url, is_sample, created_by
@@ -88,7 +90,8 @@ async function upsert(listing: VolunteerListing): Promise<string> {
       what_to_bring = EXCLUDED.what_to_bring,
       signup_url = EXCLUDED.signup_url,
       is_sample = false,
-      created_by = EXCLUDED.created_by
+      created_by = EXCLUDED.created_by,
+      source_withdrawn_at = NULL
   `
   return id
 }
@@ -113,15 +116,28 @@ try {
   await ensureAppSchema()
   for (const source of volunteerSources) {
     try {
-      const listings = await source.fetchListings()
-      const ids: string[] = []
-      for (const listing of listings) ids.push(await upsert(listing))
-      if (ids.length) {
-        await sql`DELETE FROM events WHERE created_by = ${`source:${source.id}`} AND id NOT IN ${sql(ids)}`
-      } else {
-        await sql`DELETE FROM events WHERE created_by = ${`source:${source.id}`}`
-      }
-      console.log(`${source.id}: upserted ${listings.length} listings`)
+      const snapshot = await source.fetchListings()
+      if (!snapshot.validated) throw new Error(`${source.id}: source snapshot was not validated`)
+      await sql.begin(async (tx) => {
+        const ids: string[] = []
+        for (const listing of snapshot.listings) ids.push(await upsert(tx as unknown as QueryTag, listing))
+        const owner = `source:${source.id}`
+        const activeMissing = sql`
+          created_by = ${owner}
+          AND source_withdrawn_at IS NULL
+          AND done_at IS NULL
+          AND (
+            COALESCE(ends_at, starts_at) >= now()
+            OR (starts_at IS NULL AND ends_at IS NULL AND kind IN ('city', 'org') AND signup_url IS NOT NULL)
+          )
+        `
+        if (ids.length) {
+          await tx`UPDATE events SET source_withdrawn_at = now() WHERE ${activeMissing} AND id NOT IN ${sql(ids)}`
+        } else {
+          await tx`UPDATE events SET source_withdrawn_at = now() WHERE ${activeMissing}`
+        }
+      })
+      console.log(`${source.id}: upserted ${snapshot.listings.length} listings`)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       console.error(`${source.id}: ${message}`)
