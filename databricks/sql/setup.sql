@@ -79,6 +79,9 @@ USING (SELECT * FROM VALUES
   ('Election Sign Concern Case',                         'none', 'campaign signs, bylaw matter'),
   ('Sanitation Operations Inquiry Case',                 'none', 'inquiry, not a place'),
   ('Illegal Dumping Case',                               'city', 'usually bulky items, needs a City pickup'),
+  -- Added 2026-11-08: topped Track 1 but needs a City pickup, and in the Downtown Eastside
+  -- "abandoned" items can be belongings of people living outside. Volunteers shouldn't clear them.
+  ('Abandoned Non-Recyclables-Small Case',               'city', 'dumped items need a City pickup and may be belongings'),
   -- AI 'none' picks that are a City repair at a place:
   ('Parks Washroom Servicing Case',                      'city', 'City maintains park washrooms')
   AS v(request_type, track, note)

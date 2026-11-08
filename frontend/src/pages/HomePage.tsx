@@ -7,7 +7,8 @@ import IssueRow from "../components/IssueRow";
 import VotesLeft from "../components/VotesLeft";
 import MasonryFeed from "../components/MasonryFeed";
 import TopBar from "../components/TopBar";
-import { coverRatio, requestTypeInSentence } from "../lib/cover";
+import { coverRatio } from "../lib/cover";
+import { describeReports, mergeNeighbours, spreadByArea } from "../lib/hotspots";
 import { CITY, distanceTo, formatKm } from "../lib/geo";
 import { issueScore, VAN311_URL } from "../lib/issues";
 import { EVENT_SORTS, ISSUE_SORTS, sortEvents, sortIssues } from "../lib/sort";
@@ -133,9 +134,12 @@ export default function HomePage() {
 
   // Spots that keep getting reported and have nothing planned yet
   const planned = new Set((events.items ?? []).map((e) => e.hotspotId).filter(Boolean));
-  const openHotspots = (hotspots.items ?? [])
-    .filter((h) => !planned.has(h.id))
-    .sort((a, b) => (here ? (distanceTo(here, a) ?? Infinity) - (distanceTo(here, b) ?? Infinity) : b.times_reported - a.times_reported));
+  // Touching cells with the same problem are one place. With your location: nearest first.
+  // Without: the most persistent place in each neighbourhood first, so it isn't all Downtown.
+  const places = mergeNeighbours(hotspots.items ?? []).filter((p) => !p.cellIds.some((id) => planned.has(id)));
+  const openHotspots = here
+    ? places.sort((a, b) => (distanceTo(here, a.hotspot) ?? Infinity) - (distanceTo(here, b.hotspot) ?? Infinity))
+    : spreadByArea(places);
   const hotspotsShown = showAllHotspots ? openHotspots : openHotspots.slice(0, 3);
   const sampleCount = (events.items ?? []).filter((e) => e.sample).length;
 
@@ -279,18 +283,27 @@ export default function HomePage() {
             <h2 id="needs-help-heading">Needs help</h2>
             <p className="muted small">Spots that keep getting reported, with nothing planned yet.</p>
             <ul className="plain-list">
-              {hotspotsShown.map((h) => (
-                <li key={h.id} className="help-row">
+              {hotspotsShown.map((p) => (
+                <li key={p.id} className="help-row">
                   <span>
-                    <span className="row-title">{requestTypeInSentence(h.request_type)}</span>
+                    <span className="row-title">{p.label}</span>
                     <span className="muted small">
-                      {h.near ?? h.local_area} · reported {h.times_reported}× in {h.months_seen} months
-                      {here && h.lat !== undefined && ` · ${formatKm(distanceTo(here, h)!)}`}
+                      {p.hotspot.near ?? p.hotspot.local_area} · {describeReports(p.reports, p.monthsSeen)}
+                      {here && p.hotspot.lat !== undefined && ` · ${formatKm(distanceTo(here, p.hotspot)!)}`}
                     </span>
+                    {p.action === "report" && (
+                      <span className="muted small">Needs a City pickup. Some things left out may belong to someone.</span>
+                    )}
                   </span>
-                  <Link className="chip-button" to={`/volunteer/new?hotspot=${encodeURIComponent(h.id)}`}>
-                    Start one
-                  </Link>
+                  {p.action === "report" ? (
+                    <a className="chip-button" href={VAN311_URL} target="_blank" rel="noopener noreferrer">
+                      Report ↗
+                    </a>
+                  ) : (
+                    <Link className="chip-button" to={`/volunteer/new?hotspot=${encodeURIComponent(p.id)}`}>
+                      {p.action === "walk" ? "Plan a walk" : "Start a cleanup"}
+                    </Link>
+                  )}
                 </li>
               ))}
             </ul>
