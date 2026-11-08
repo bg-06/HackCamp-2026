@@ -1,209 +1,178 @@
-import { ChevronDown, ExternalLink, Mail, MapPin } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
-import { getTrack2Issues, getVolunteerEvents, setVote, USE_MOCK } from "../api/client";
+import { ChevronDown, LocateFixed, TriangleAlert } from "lucide-react";
+import { useLayoutEffect, useRef, useState } from "react";
+import { Link, Navigate, useParams } from "react-router-dom";
+import { USE_MOCK } from "../api/client";
 import EventTile from "../components/EventTile";
-import IssueTile from "../components/IssueTile";
-import LocationSheet, { type LocateStatus } from "../components/LocationSheet";
+import IssueRow from "../components/IssueRow";
 import MasonryFeed from "../components/MasonryFeed";
 import TopBar from "../components/TopBar";
-import { coverRatio } from "../lib/cover";
-import { DEFAULT_CITY, distanceTo, nearestCity, type City } from "../lib/geo";
+import { coverRatio, requestTypeInSentence } from "../lib/cover";
+import { CITY, distanceTo, formatKm } from "../lib/geo";
 import { issueScore, VAN311_URL } from "../lib/issues";
 import { EVENT_SORTS, ISSUE_SORTS, sortEvents, sortIssues } from "../lib/sort";
-import type { FeedTab, LatLng, SortKey, Track2Issue, VolunteerEvent, Vote } from "../types";
+import { useFeed, type LocateStatus } from "../state/feed";
+import type { FeedTab, SortKey, Vote } from "../types";
 
-// One list per tab. No items and no error = still loading.
-interface Loaded<T> {
-  items?: T[];
-  error?: string;
-}
-
-function errorText(e: unknown) {
-  return e instanceof Error ? e.message : String(e);
-}
+const LOCATION_NOTES: Partial<Record<LocateStatus, { text: string; warn?: boolean }>> = {
+  locating: { text: "Finding you…" },
+  outside: { text: "You're outside Vancouver. We only have Vancouver data so far, but distances are from where you are." },
+  denied: { text: "Location is off for this site. You can turn it on in your browser settings.", warn: true },
+  unavailable: { text: "Couldn't get your location. Try again in a moment.", warn: true },
+  insecure: { text: "Location only works over https.", warn: true },
+};
 
 export default function HomePage() {
   const { tab: tabParam } = useParams();
-  const navigate = useNavigate();
-  const tab: FeedTab = tabParam === "fix" ? "fix" : "help";
+  const tab: FeedTab = tabParam === "issues" ? "issues" : "volunteer";
 
-  const [events, setEvents] = useState<Loaded<VolunteerEvent>>({});
-  const [issues, setIssues] = useState<Loaded<Track2Issue>>({});
-  const [reloadKey, setReloadKey] = useState(0);
+  const {
+    events,
+    issues,
+    hotspots,
+    reload,
+    here,
+    locStatus,
+    toggleNearMe,
+    eventSort,
+    setEventSort,
+    issueSort,
+    setIssueSort,
+    query,
+    setQuery,
+    searchOpen,
+    setSearchOpen,
+    getScroll,
+    saveScroll,
+    setMyVote,
+    requireSignIn,
+  } = useFeed();
+  const [sortOpen, setSortOpen] = useState(false);
+  const [showAllHotspots, setShowAllHotspots] = useState(false);
+  const contentRef = useRef<HTMLElement>(null);
 
-  // Where: a city (only Vancouver has data so far), plus the user's own position if they share it.
-  const [city, setCity] = useState<City>(DEFAULT_CITY);
-  const [here, setHere] = useState<LatLng | null>(null);
-  const [locStatus, setLocStatus] = useState<LocateStatus>("idle");
-  const [sheetOpen, setSheetOpen] = useState(false);
+  // Back from a card: put the list where it was
+  useLayoutEffect(() => {
+    if (contentRef.current) contentRef.current.scrollTop = getScroll(tab);
+  }, [tab, getScroll]);
 
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [eventSort, setEventSort] = useState<SortKey>("recommended");
-  const [issueSort, setIssueSort] = useState<SortKey>("recommended");
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [query, setQuery] = useState("");
-
-  // Load both lists once (and again on "Try again"), so switching tabs is instant and keeps your votes.
-  useEffect(() => {
-    let cancelled = false;
-    getVolunteerEvents()
-      .then((items) => !cancelled && setEvents({ items }))
-      .catch((e: unknown) => !cancelled && setEvents({ error: errorText(e) }));
-    getTrack2Issues()
-      .then((items) => !cancelled && setIssues({ items }))
-      .catch((e: unknown) => !cancelled && setIssues({ error: errorText(e) }));
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
-  // Ask for the position only when the user taps something that needs it.
-  const locate = useCallback(() => {
-    if (!("geolocation" in navigator)) {
-      setLocStatus("unavailable");
-      return;
-    }
-    setLocStatus("locating");
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        setHere(p);
-        const c = nearestCity(p);
-        if (c.available) {
-          setCity(c);
-          setLocStatus("found");
-        } else {
-          setLocStatus("outside");
-        }
-      },
-      (err) => setLocStatus(err.code === err.PERMISSION_DENIED ? "denied" : "unavailable"),
-      { timeout: 10000, maximumAge: 5 * 60 * 1000 },
-    );
-  }, []);
-
-  const closeSheet = useCallback(() => setSheetOpen(false), []);
-
-  // Only "/" and "/fix" belong to this page.
-  if (tabParam !== undefined && tabParam !== "fix") return <Navigate to="/" replace />;
-
-  const current = tab === "help" ? events : issues;
-  const loading = !current.items && !current.error;
-  const q = query.trim().toLowerCase();
-  const from = here ?? city.centre; // distances are from you, or from the city centre
-  const sort = tab === "help" ? eventSort : issueSort;
-  const sorts = tab === "help" ? EVENT_SORTS : ISSUE_SORTS;
+  const from = here ?? CITY.centre; // distances are from you, or from City Hall
+  const eventQ = query.volunteer.trim().toLowerCase();
+  const issueQ = query.issues.trim().toLowerCase();
   const ctx = { from, events: events.items ?? [], issues: issues.items ?? [] };
 
+  // Issues keep their order while you're on the page, so a row you vote on doesn't jump away from
+  // under your finger. The order (and the #) is worked out again when the sort, search, location or
+  // list changes, or when you come back to the tab. "For you" also uses your sign-ups, so it waits for events.
+  const orderKey = [
+    tab,
+    issueSort,
+    issueQ,
+    here ? `${here.lat},${here.lng}` : "",
+    events.items ? "events" : "",
+    (issues.items ?? []).map((i) => i.issue_id).join(),
+  ].join("|");
+  const [issueOrder, setIssueOrder] = useState<{ key: string; ids: string[]; rank: Map<string, number> } | null>(null);
+  if (issues.items && issueOrder?.key !== orderKey) {
+    const matching = issues.items.filter(
+      (i) => !issueQ || `${i.request_type} ${i.address ?? ""} ${i.local_area}`.toLowerCase().includes(issueQ),
+    );
+    const byScore = [...issues.items].sort((a, b) => issueScore(b).score - issueScore(a).score);
+    setIssueOrder({
+      key: orderKey,
+      ids: sortIssues(matching, issueSort, ctx).map((i) => i.issue_id),
+      rank: new Map(byScore.map((i, n) => [i.issue_id, n + 1])),
+    });
+  }
+
+  // Only "/" and "/issues" belong to this page.
+  if (tabParam !== undefined && tabParam !== "issues") return <Navigate to="/" replace />;
+
+  const current = tab === "volunteer" ? events : issues;
+  const loading = !current.items && !current.error;
+  const q = tab === "volunteer" ? eventQ : issueQ;
+  const sort = tab === "volunteer" ? eventSort : issueSort;
+  const sorts = tab === "volunteer" ? EVENT_SORTS : ISSUE_SORTS;
+
   const shownEvents = sortEvents(
-    (events.items ?? []).filter((e) => !q || `${e.title} ${e.organiser} ${e.location} ${e.localArea}`.toLowerCase().includes(q)),
+    (events.items ?? []).filter((e) => !eventQ || `${e.title} ${e.organiser} ${e.location} ${e.localArea}`.toLowerCase().includes(eventQ)),
     eventSort,
     ctx,
   );
-  const shownIssues = sortIssues(
-    (issues.items ?? []).filter((i) => !q || `${i.request_type} ${i.address ?? ""} ${i.local_area}`.toLowerCase().includes(q)),
-    issueSort,
-    ctx,
-  );
+  const issueById = new Map((issues.items ?? []).map((i) => [i.issue_id, i]));
+  const shownIssues = (issueOrder?.ids ?? []).flatMap((id) => issueById.get(id) ?? []);
   const totalVotes = (issues.items ?? []).reduce((n, i) => n + issueScore(i).up + issueScore(i).down, 0);
 
-  function changeTab(next: FeedTab) {
-    navigate(next === "fix" ? "/fix" : "/");
-  }
+  // Spots that keep getting reported and have nothing planned yet
+  const planned = new Set((events.items ?? []).map((e) => e.hotspotId).filter(Boolean));
+  const openHotspots = (hotspots.items ?? [])
+    .filter((h) => !planned.has(h.id))
+    .sort((a, b) => (here ? (distanceTo(here, a) ?? Infinity) - (distanceTo(here, b) ?? Infinity) : b.times_reported - a.times_reported));
+  const hotspotsShown = showAllHotspots ? openHotspots : openHotspots.slice(0, 3);
+  const sampleCount = (events.items ?? []).filter((e) => e.sample).length;
 
   function pickSort(key: SortKey) {
-    (tab === "help" ? setEventSort : setIssueSort)(key);
-    if (key === "distance" && !here && locStatus === "idle") locate();
+    (tab === "volunteer" ? setEventSort : setIssueSort)(key);
+    if (key === "distance" && !here && locStatus === "off") toggleNearMe();
   }
 
   function toggleSearch() {
-    if (searchOpen) setQuery("");
-    setSearchOpen(!searchOpen);
+    if (searchOpen[tab]) setQuery(tab, "");
+    setSearchOpen(tab, !searchOpen[tab]);
   }
 
-  function retry() {
-    setEvents({});
-    setIssues({});
-    setReloadKey((k) => k + 1);
+  function vote(id: string, value: Vote) {
+    requireSignIn("vote", () => setMyVote(id, value));
   }
 
-  function setMyVote(id: string, value: Vote) {
-    const before = issues.items?.find((i) => i.issue_id === id)?.my_vote ?? 0;
-    const apply = (v: Vote) =>
-      setIssues((prev) => ({
-        ...prev,
-        items: prev.items?.map((i) => (i.issue_id === id ? { ...i, my_vote: v } : i)),
-      }));
-    apply(value);
-    setVote(id, value).catch(() => apply(before));
-  }
-
-  // Prefilled email the resident sends themselves: the 5 most pressing by vote score, whatever the sort.
-  // We don't send anything, and we don't claim the City reads it.
+  // A prefilled email the resident sends themselves. We don't send anything.
   function councilMailto() {
-    const top = [...(issues.items ?? [])].sort((a, b) => issueScore(b).score - issueScore(a).score).slice(0, 5);
-    const lines = top.map(
-      (i, n) =>
-        `${n + 1}. ${i.request_type.replace(/ Case$/, "")} at ${i.address ?? i.local_area}: open ${i.days_open} days, reported ${i.times_reported_12m} times in the last 12 months`,
-    );
+    const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+    const lines = [...(issues.items ?? [])]
+      .sort((a, b) => issueScore(b).score - issueScore(a).score)
+      .slice(0, 5)
+      .map(
+        (i, n) =>
+          `${n + 1}. ${i.request_type.replace(/ Case$/, "")} at ${i.address ?? i.local_area}: open ${plural(i.days_open, "day")}, reported ${plural(i.times_reported_12m, "time")} in the last 12 months`,
+      );
     const body = [
       `Hello,`,
       ``,
-      `These are the most pressing City issues in ${city.name}, as voted by neighbours on Block by Block:`,
+      `These are the most pressing City issues in ${CITY.name}, as voted by neighbours on Block by Block:`,
       ``,
       ...lines,
       ``,
       `Report or follow up in Van311: ${VAN311_URL}`,
       ``,
       `Thank you.`,
-    ].join("\n");
-    return `mailto:?subject=${encodeURIComponent(`Most pressing issues in ${city.name}`)}&body=${encodeURIComponent(body)}`;
+    ].join("\r\n"); // mailto bodies need CRLF, or some mail apps put it all on one line
+    return `mailto:?subject=${encodeURIComponent(`Most pressing issues in ${CITY.name}`)}&body=${encodeURIComponent(body)}`;
   }
 
-  const distanceHint = sort === "distance" && !here && (
-    <p className="sort-hint">
-      Distances are from {city.name} City Hall.{" "}
-      <button className="link-button" onClick={() => setSheetOpen(true)}>
-        Use your location
-      </button>
-    </p>
-  );
+  const locationNote = LOCATION_NOTES[locStatus];
+  const sortLabel = sorts.find((s) => s.key === sort)?.label ?? "For you";
 
   return (
     <div className="page">
       <header className={`home-header track-${tab}`}>
-        <TopBar
-          tab={tab}
-          onTabChange={changeTab}
-          filtersOpen={filtersOpen}
-          filtersActive={sort !== "recommended"}
-          onToggleFilters={() => setFiltersOpen(!filtersOpen)}
-          searchOpen={searchOpen}
-          onToggleSearch={toggleSearch}
-        />
+        <TopBar title={tab === "volunteer" ? "Volunteer" : "Issues"} searchOpen={searchOpen[tab]} onToggleSearch={toggleSearch} />
 
-        <div className="location-row">
-          <button className="location-pill" onClick={() => setSheetOpen(true)} aria-haspopup="dialog">
-            <MapPin size={16} aria-hidden="true" />
-            <span>{city.name}</span>
-            {here && <span className="location-sub">· Near you</span>}
+        <div className="control-row">
+          <button
+            className={`control-pill ${here ? "on" : ""}`}
+            aria-pressed={Boolean(here)}
+            onClick={toggleNearMe}
+            disabled={locStatus === "locating"}
+          >
+            <LocateFixed size={16} aria-hidden="true" />
+            Near me
+          </button>
+          <button className="control-pill" aria-expanded={sortOpen} onClick={() => setSortOpen(!sortOpen)}>
+            Sort: {sortLabel}
             <ChevronDown size={16} aria-hidden="true" />
           </button>
         </div>
 
-        {searchOpen && (
-          <input
-            className="search-input"
-            type="search"
-            aria-label="Search"
-            placeholder={tab === "fix" ? "Search an issue or street" : "Search events or organisers"}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            autoFocus
-          />
-        )}
-
-        {filtersOpen && (
+        {sortOpen && (
           <div className="filter-row" role="group" aria-label="Sort by">
             {sorts.map((s) => (
               <button
@@ -217,42 +186,101 @@ export default function HomePage() {
             ))}
           </div>
         )}
+
+        {searchOpen[tab] && (
+          <input
+            className="search-input"
+            type="search"
+            aria-label="Search"
+            placeholder={tab === "issues" ? "Search an issue or street" : "Search ways to help or organisers"}
+            value={query[tab]}
+            onChange={(e) => setQuery(tab, e.target.value)}
+            autoFocus
+          />
+        )}
       </header>
 
-      <main className="page-content">
-        {tab === "help" ? (
-          <section className="intro-card track1">
-            <h1>Ways to help in {city.name}</h1>
-            <p>Volunteer events from the City, local groups and neighbours, often right where the same problem keeps getting reported.</p>
-            {events.items && (
-              <p className="intro-count">
-                {events.items.length} upcoming {events.items.length === 1 ? "event" : "events"}
+      <main className="page-content" ref={contentRef} onScroll={(e) => saveScroll(tab, e.currentTarget.scrollTop)}>
+        {locationNote &&
+          (locationNote.warn ? (
+            <p className="form-error" role="status">
+              <TriangleAlert size={16} aria-hidden="true" />
+              {locationNote.text}
+            </p>
+          ) : (
+            <p className="sort-hint" role="status">
+              {locationNote.text}
+            </p>
+          ))}
+        {sort === "distance" && !here && locStatus !== "locating" && (
+          <p className="sort-hint">Distances are from City Hall. Turn on Near me for distances from you.</p>
+        )}
+
+        {tab === "volunteer" ? (
+          <section className="intro">
+            <h2>Help out in {CITY.name}</h2>
+            <p>
+              Cleanups and other ways to help, run by the City, local groups and neighbours. Many are on blocks where the same problem keeps
+              getting reported.
+            </p>
+            {sampleCount > 0 && (
+              <p className="muted small">
+                {sampleCount === events.items?.length ? "All" : `${sampleCount} of ${events.items?.length}`} listings are samples, not yet
+                confirmed with the organiser.
               </p>
             )}
           </section>
         ) : (
-          <section className="intro-card track2">
-            <h1>What needs fixing in {city.name}</h1>
+          <section className="intro">
+            <h2>What needs fixing in {CITY.name}</h2>
             <p>
-              Only the City can fix these. Vote <strong>▲</strong> if it affects you, <strong>▼</strong> if it's not a problem or already
-              fixed.
+              Only the City can fix these. Vote up if it affects you, down if it's not a problem or already fixed.
+              {issues.items && ` ${totalVotes} ${totalVotes === 1 ? "vote" : "votes"} so far.`}
             </p>
-            <p className="intro-count">
-              {issues.items && (
-                <span>
-                  {totalVotes} {totalVotes === 1 ? "vote" : "votes"} so far
-                </span>
-              )}
-              <a href={VAN311_URL} target="_blank" rel="noopener noreferrer">
-                Report something new in Van311 <ExternalLink size={12} aria-hidden="true" />
-              </a>
-            </p>
+            <p className="muted small">The number is a priority score: votes, plus how long it's been open and how often it's reported.</p>
+            <a className="text-link" href={VAN311_URL} target="_blank" rel="noopener noreferrer">
+              Report something new in Van311 ↗
+            </a>
           </section>
         )}
 
-        {distanceHint}
+        {tab === "volunteer" && openHotspots.length > 0 && (
+          <section className="needs-help" aria-labelledby="needs-help-heading">
+            <h2 id="needs-help-heading">Needs help</h2>
+            <p className="muted small">Spots that keep getting reported, with nothing planned yet.</p>
+            <ul className="plain-list">
+              {hotspotsShown.map((h) => (
+                <li key={h.id} className="help-row">
+                  <span>
+                    <span className="row-title">{requestTypeInSentence(h.request_type)}</span>
+                    <span className="muted small">
+                      {h.near ?? h.local_area} · reported {h.times_reported}× in {h.months_seen} months
+                      {here && h.lat !== undefined && ` · ${formatKm(distanceTo(here, h)!)}`}
+                    </span>
+                  </span>
+                  <Link className="chip-button" to={`/volunteer/new?hotspot=${encodeURIComponent(h.id)}`}>
+                    Start one
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            {openHotspots.length > 3 && (
+              <button className="link-button small" onClick={() => setShowAllHotspots(!showAllHotspots)}>
+                {showAllHotspots ? "Show fewer" : `Show all ${openHotspots.length}`}
+              </button>
+            )}
+          </section>
+        )}
 
-        {loading && (
+        {loading && tab === "issues" && (
+          <div className="issue-list" aria-busy="true" aria-label="Loading">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="skeleton" style={{ height: 96 }} />
+            ))}
+          </div>
+        )}
+
+        {loading && tab === "volunteer" && (
           <div className="masonry" aria-busy="true" aria-label="Loading">
             {[0, 1].map((c) => (
               <div key={c} className="masonry-col">
@@ -266,82 +294,65 @@ export default function HomePage() {
 
         {current.error && (
           <div className="empty" role="alert">
-            <p>Couldn't load {tab === "fix" ? "issues" : "events"}. Check your connection and try again.</p>
-            <button className="chip-button" onClick={retry}>
+            <p>Couldn't load {tab === "issues" ? "issues" : "ways to help"}. Check your connection and try again.</p>
+            <button className="chip-button" onClick={reload}>
               Try again
             </button>
           </div>
         )}
 
-        {tab === "help" && events.items && shownEvents.length === 0 && (
+        {tab === "volunteer" && events.items && shownEvents.length === 0 && (
           <div className="empty">
-            <p>{q ? "No events match that yet." : "Nothing planned here yet. Start an event from a hotspot on the map."}</p>
+            <p>{q ? "Nothing matches that yet." : "No ways to help here yet. Start one from a spot above."}</p>
           </div>
         )}
 
-        {tab === "help" && shownEvents.length > 0 && (
-          <MasonryFeed
-            label="Events"
-            items={shownEvents.map((e) => {
-              const ratio = coverRatio(e.id);
-              return {
-                key: e.id,
-                ratio,
-                node: <EventTile event={e} ratio={ratio} distanceKm={here ? distanceTo(here, e) : undefined} />,
-              };
-            })}
-          />
+        {tab === "volunteer" && shownEvents.length > 0 && (
+          <>
+            {openHotspots.length > 0 && <h2 className="feed-heading">Ways to help</h2>}
+            <MasonryFeed
+              label="Ways to volunteer"
+              items={shownEvents.map((e) => {
+                const ratio = coverRatio(e.id, Boolean(e.photoUrl));
+                return {
+                  key: e.id,
+                  ratio,
+                  node: <EventTile event={e} ratio={ratio} distanceKm={here ? distanceTo(here, e) : undefined} />,
+                };
+              })}
+            />
+          </>
         )}
 
-        {tab === "fix" && issues.items && shownIssues.length === 0 && (
+        {tab === "issues" && issues.items && shownIssues.length === 0 && (
           <div className="empty">
             <p>{q ? "No issues match that yet." : "No open City issues here right now."}</p>
           </div>
         )}
 
-        {tab === "fix" && shownIssues.length > 0 && (
+        {tab === "issues" && shownIssues.length > 0 && (
           <>
-            <MasonryFeed
-              label="Issues"
-              items={shownIssues.map((i, n) => {
-                const ratio = coverRatio(i.issue_id);
-                return {
-                  key: i.issue_id,
-                  ratio,
-                  node: (
-                    <IssueTile
-                      issue={i}
-                      rank={n + 1}
-                      ratio={ratio}
-                      distanceKm={here ? distanceTo(here, i) : undefined}
-                      onVote={setMyVote}
-                    />
-                  ),
-                };
-              })}
-            />
+            <ul className="issue-list" aria-label="Issues">
+              {shownIssues.map((i) => (
+                <li key={i.issue_id}>
+                  <IssueRow
+                    issue={i}
+                    rank={issueOrder?.rank.get(i.issue_id) ?? 0}
+                    distanceKm={here ? distanceTo(here, i) : undefined}
+                    onVote={vote}
+                  />
+                </li>
+              ))}
+            </ul>
             <a className="action-button council" href={councilMailto()}>
-              <Mail size={16} aria-hidden="true" /> Send the top 5 to Council
+              Send the top 5 to Council
             </a>
             <p className="action-note center">Opens an email in your own mail app. You choose who to send it to.</p>
           </>
         )}
 
-        {USE_MOCK && <p className="sample-note">Sample data</p>}
+        {USE_MOCK && tab === "issues" && <p className="sample-note">Sample data</p>}
       </main>
-
-      {sheetOpen && (
-        <LocationSheet
-          city={city}
-          status={locStatus}
-          onUseLocation={locate}
-          onPickCity={(c) => {
-            setCity(c);
-            setSheetOpen(false);
-          }}
-          onClose={closeSheet}
-        />
-      )}
     </div>
   );
 }

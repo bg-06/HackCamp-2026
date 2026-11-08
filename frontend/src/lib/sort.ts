@@ -26,7 +26,7 @@ function interests(events: VolunteerEvent[], issues: Track2Issue[]) {
 
 // Compare as times, not strings: "10:00-07:00" vs "09:30-08:00" sorts wrong as text,
 // and the seed, the mock data and the backend don't all use the same offset.
-const time = (iso?: string | null, missing = 0) => (iso ? Date.parse(iso) : missing)
+const time = (iso?: string) => (iso ? Date.parse(iso) : 0)
 
 // Items with no place go last when sorting by distance.
 const byDistance = (from: LatLng) => (a: { lat?: number; lng?: number }, b: { lat?: number; lng?: number }) =>
@@ -49,7 +49,7 @@ export function sortEvents(
       // For you: categories you care about first, then the soonest
       const liked = interests(ctx.events, ctx.issues)
       return out.sort(
-        (a, b) => Number(liked.has(b.category)) - Number(liked.has(a.category)) || time(a.startsAt, Infinity) - time(b.startsAt, Infinity),
+        (a, b) => Number(liked.has(b.category)) - Number(liked.has(a.category)) || time(a.startsAt) - time(b.startsAt),
       )
     }
   }

@@ -14,8 +14,8 @@ export interface VolunteerEvent {
   title: string
   organiser: string
   category: string // same category names as the 311 data (see data/categories.ts)
-  startsAt: string | null // null for ongoing external opportunities
-  endsAt: string | null
+  startsAt: string // ISO with offset, e.g. 2026-11-15T10:00:00-07:00
+  endsAt: string
   location: string
   localArea: string
   spotsTotal?: number // in-app events only
@@ -32,7 +32,8 @@ export interface VolunteerEvent {
   popularity?: number // how many people searched for or opened it, for "Popular"
   photoUrl?: string // e.g. the host's "before" photo; a category cover is shown when missing
   going?: boolean // the current user's RSVP. spotsTaken does NOT count it
-  withdrawn?: boolean // external source no longer advertises this listing; history remains accessible
+  commentCount?: number
+  hotspotId?: string // the HelpHotspot it was started from, if any
 }
 
 /** Track 2: something only the City can fix. One request type in one H3 cell with open cases. */
@@ -54,6 +55,38 @@ export interface Track2Issue {
   lng?: number
   popularity?: number // how many people searched for or opened it
   photo_url?: string // a resident's photo of it; 311 data has none
+  comment_count?: number
+}
+
+/** Track 1 spot that keeps getting reported, from gold_help_hotspots. Can be turned into an event. */
+export interface HelpHotspot {
+  id: string // h3_r9 + "|" + request_type
+  h3_r9: string
+  request_type: string
+  category: string
+  local_area: string
+  times_reported: number
+  months_seen: number
+  last_reported: string
+  lat?: number // centre of the H3 cell
+  lng?: number
+  near?: string // a nearby street, if the backend has one
+}
+
+// What the "Start an event" form sends
+export interface NewEvent {
+  hotspotId?: string
+  title: string
+  startsAt: string
+  endsAt: string
+  location: string
+  localArea: string
+  category: string
+  spotsTotal: number
+  whatToBring?: string
+  lat?: number
+  lng?: number
+  hotspot?: VolunteerEvent['hotspot']
 }
 
 export type Vote = -1 | 0 | 1
@@ -83,3 +116,13 @@ export interface Comment {
 }
 
 export type FeedTab = 'volunteer' | 'issues'
+
+// Something the current user took part in, for their volunteer hours on Profile
+export interface VolunteerRecord {
+  id: string
+  title: string
+  organiser: string
+  date: string // ISO
+  hours: number
+  sample: boolean
+}

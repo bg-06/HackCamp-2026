@@ -1,9 +1,10 @@
 import { ChevronLeft } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { getVolunteerEvent } from "../api/client";
 import Discussion from "../components/Discussion";
 import PlaceSection from "../components/PlaceSection";
+import VolunteerAction from "../components/VolunteerAction";
 import VolunteerCard from "../components/VolunteerCard";
 import { useFeed } from "../state/feed";
 import type { VolunteerEvent } from "../types";
@@ -12,7 +13,7 @@ export default function VolunteerPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { events, setGoing } = useFeed();
+  const { events, setGoing, requireSignIn } = useFeed();
 
   // Opened from the feed: use what we already have. Opened from a link: fetch it.
   const cached = events.items?.find((e) => e.id === id);
@@ -20,6 +21,7 @@ export default function VolunteerPage() {
   const [error, setError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const inFeed = Boolean(cached);
+  const lastTap = useRef(0);
 
   useEffect(() => {
     if (inFeed) return;
@@ -37,8 +39,12 @@ export default function VolunteerPage() {
   function toggleGoing() {
     if (!event) return;
     const on = !event.going;
-    if (!inFeed) setFetched((e) => (e ? { ...e, going: on } : e));
-    setGoing(event.id, on).then((ok) => !ok && !inFeed && setFetched((e) => (e ? { ...e, going: !on } : e)));
+    requireSignIn("sign up", () => {
+      // same guard as the feed: only the latest tap may roll back
+      const n = ++lastTap.current;
+      if (!inFeed) setFetched((e) => (e ? { ...e, going: on } : e));
+      setGoing(event.id, on).then((ok) => !ok && !inFeed && lastTap.current === n && setFetched((e) => (e ? { ...e, going: !on } : e)));
+    });
   }
 
   // "default" means this page was opened directly, not from inside the app
@@ -85,12 +91,18 @@ export default function VolunteerPage() {
 
         {event && (
           <>
-            <VolunteerCard event={event} going={Boolean(event.going)} onToggleGoing={toggleGoing} />
+            <VolunteerCard event={event} />
             <PlaceSection lat={event.lat} lng={event.lng} label={`${event.location}, ${event.localArea}`} />
             <Discussion type="event" id={event.id} />
           </>
         )}
       </main>
+
+      {event && (
+        <div className="action-bar">
+          <VolunteerAction event={event} onToggleGoing={toggleGoing} />
+        </div>
+      )}
     </div>
   );
 }
