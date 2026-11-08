@@ -1,8 +1,10 @@
 import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import BottomNav from './components/BottomNav'
+import SignInPrompt from './components/SignInPrompt'
 import HomePage from './pages/HomePage'
 import IssuePage from './pages/IssuePage'
-import PlaceholderPage from './pages/PlaceholderPage'
+import NewEventPage from './pages/NewEventPage'
+import ProfilePage from './pages/ProfilePage'
 import VolunteerPage from './pages/VolunteerPage'
 import FeedProvider from './state/FeedProvider'
 
@@ -30,17 +32,16 @@ export default function App() {
           {/* "/" is Volunteer (Track 1), "/issues" is Issues (Track 2). Lists, location, sort and scroll live
               in FeedProvider, so they survive opening a card and coming back. */}
           <Route path="/:tab?" element={<HomePage />} />
+          <Route path="/volunteer/new" element={<NewEventPage />} />
           <Route path="/volunteer/:id" element={<VolunteerRoute />} />
           <Route path="/issues/:id" element={<IssueRoute />} />
           <Route path="/events/:id" element={<OldEventLink />} />
           <Route path="/fix" element={<Navigate to="/issues" replace />} />
-          <Route
-            path="/me"
-            element={<PlaceholderPage title="Profile" text="Where you've signed up to help, your volunteer hours and your votes will show up here." />}
-          />
+          <Route path="/me" element={<ProfilePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <BottomNav />
+        <SignInPrompt />
       </div>
     </FeedProvider>
   )

@@ -4,15 +4,21 @@ React + TypeScript + Vite. Mobile-first. Three tabs in the bottom nav:
 
 - **Volunteer** (`/`, green, Track 1): ways to help, run by the City, local groups and neighbours
 - **Issues** (`/issues`, deep blue, Track 2): City-only issues, voted up or down, with "Send the top 5 to Council"
-- **Profile** (`/me`): not built yet
+- **Profile** (`/me`, charcoal): what you signed up for, your votes, your volunteer hours and a CSV download of them
 
-Volunteer is a two-column, photo-first feed. Issues is a plain list, one row each, with the vote on the right. The sort button offers For you / Newest / Popular / Nearest
-(plus Longest unsolved on Issues). The location button picks a city (only Vancouver has data so far) or
-uses the device's location for "Nearest".
+Volunteer is a two-column, photo-first feed, with a **Needs help** list above it: spots that keep getting
+reported and have nothing planned, each with **Start one**, which opens `/volunteer/new?hotspot=…` prefilled.
+Issues is a plain list, one row each, with the vote on the right. Its order stays put while you vote, so a
+row doesn't jump away; it re-sorts when you come back.
 
-Tapping a card opens its page, `/volunteer/:id` or `/issues/:id`, with everything else on it:
-the details and the one action (sign up, or vote), **Where** (a small map and a Directions link), and the
-**Discussion** (comments). There's no separate forum or map tab.
+Under each title: **Near me** (turns on location, for distances and "Nearest") and **Sort: …**
+(For you / Newest / Popular / Nearest, plus Longest unsolved on Issues). Only Vancouver has data so far.
+
+Tapping a card opens its page, `/volunteer/:id` or `/issues/:id`: the details, **Where** (a small map and a
+Directions link) and the **Discussion**. The one action (sign up, or vote) is pinned to the bottom.
+
+Voting, signing up, commenting and starting an event ask you to sign in first, then carry on with what you
+tapped. In mock mode "Sign in" is a sample that needs no account.
 
 ## Run
 
@@ -33,17 +39,19 @@ src/
   data/mockComments.ts         sample comments
   lib/issues.ts                live vote score, Van311 link
   lib/sort.ts                  the sort options for each tab
-  lib/geo.ts                   cities, distance, nearest city
+  lib/geo.ts                   Vancouver, distance
   lib/cover.ts                 card cover shapes, request type wording
   lib/comments.ts              author labels, "3h ago" times, length limit
-  components/TopBar.tsx        sort button, page title, search button
+  lib/hours.ts                 hours formatting and the CSV download
+  components/TopBar.tsx        page title, search button
   components/BottomNav.tsx     Volunteer / Issues / Profile
   components/MasonryFeed.tsx   two-column feed
   components/EventTile.tsx     a volunteer card in the feed
   components/IssueRow.tsx      one issue in the list, with the vote beside it
   components/VoteControl.tsx   ▲ score ▼
-  components/LocationSheet.tsx bottom sheet: use my location, or pick a city
-  components/VolunteerCard.tsx top of a volunteer page: details and sign-up
+  components/SignInPrompt.tsx  "Sign in to vote" sheet; runs what you tapped after sign-in
+  components/VolunteerCard.tsx top of a volunteer page: the details
+  components/VolunteerAction.tsx the sign-up button, pinned to the bottom
   components/PlaceSection.tsx  "Where": place, map, directions
   components/MapPreview.tsx    MapLibre map (lazy-loaded, OpenFreeMap tiles)
   components/Discussion.tsx    comments and the comment form
@@ -51,8 +59,9 @@ src/
   state/feed.ts                useFeed() and its types
   pages/HomePage.tsx           both feeds; the route picks which one
   pages/VolunteerPage.tsx      one volunteer opportunity
+  pages/NewEventPage.tsx       start an event from a hotspot
   pages/IssuePage.tsx          one issue
-  pages/PlaceholderPage.tsx    Profile (not built yet)
+  pages/ProfilePage.tsx        sign-ups, votes, volunteer hours
   index.css                    all styles; colours are CSS variables at the top
 ```
 
@@ -79,11 +88,16 @@ All data goes through `src/api/client.ts`. Pages never fetch on their own.
 | `getVolunteerEvents()` | `GET /events` | `VolunteerEvent[]` |
 | `getVolunteerEvent(id)` | `GET /events/:id` | `VolunteerEvent`, or `null` on 404 |
 | `setGoing(id, on)` | `POST` / `DELETE /events/:id/rsvp` | nothing |
+| `getHelpHotspots()` | `GET /hotspots` | `HelpHotspot[]` (gold_help_hotspots + cell centre) |
+| `createEvent(input)` | `POST /events` with `NewEvent` | `VolunteerEvent` (host = the signed-in user) |
 | `getTrack2Issues()` | `GET /issues` | `Track2Issue[]` (`up_votes`/`down_votes` without the current user's vote, which goes in `my_vote`) |
 | `getTrack2Issue(id)` | `GET /issues/:id` | `Track2Issue`, or `null` on 404 |
 | `setVote(id, value)` | `PUT /issues/:id/vote` with `{ value: 1 or -1 }`, or `DELETE` to clear | nothing |
+| `getMyHistory()` | `GET /me/history` | `VolunteerRecord[]`, newest first |
 | `getComments(type, id)` | `GET /events/:id/comments` or `/issues/:id/comments` | `Comment[]`, oldest first |
 | `addComment(type, id, body)` | `POST` the same path with `{ body }` | `Comment` |
 
-Signing up, voting and commenting need sign-in. The author of a comment must come from the session on the
+`GET /events` should also send `commentCount` and `hotspotId`, and `GET /issues` a `comment_count`.
+
+Signing up, voting, commenting and starting an event need sign-in. The author of a comment must come from the session on the
 server, never from the request body. Comments are plain text; the page never renders HTML from them.
