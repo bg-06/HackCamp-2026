@@ -14,8 +14,8 @@ export interface VolunteerEvent {
   title: string
   organiser: string
   category: string // same category names as the 311 data (see data/categories.ts)
-  startsAt: string // ISO with offset, e.g. 2026-11-15T10:00:00-07:00
-  endsAt: string
+  startsAt: string | null // null for ongoing programs; otherwise ISO with offset
+  endsAt: string | null
   location: string
   localArea: string
   spotsTotal?: number // in-app events only

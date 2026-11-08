@@ -1,13 +1,13 @@
-import { CityCuratedAdapter } from './city-curated.js'
-import { MeetupPublicPageAdapter } from './meetup.js'
+import { communityOpportunitySources } from './community-opportunities.js'
+import { GreenTeamsOpportunitiesAdapter } from './green-teams-opportunities.js'
 import type { VolunteerSourceAdapter } from './types.js'
 
 export const volunteerSources: VolunteerSourceAdapter[] = [
-  new CityCuratedAdapter(),
-  new MeetupPublicPageAdapter(
-    'https://www.meetup.com/the-lower-mainland-green-team/events/',
-    'The Lower Mainland Green Team',
-  ),
+  new GreenTeamsOpportunitiesAdapter(),
+  ...communityOpportunitySources,
 ]
+
+// Sources intentionally removed from the public feed. Ingestion soft-withdraws their old rows.
+export const retiredVolunteerSourceIds = ['vancouver-city-volunteer-programs']
 
 export type { VolunteerListing, VolunteerSourceAdapter } from './types.js'

@@ -1,17 +1,14 @@
 // Every call to the backend goes through this file.
 //
-// Backend team: replace the parts marked TODO(backend). Pages and components
-// don't need to change, as long as these functions keep returning the types
-// in src/types.ts. If the backend uses different field names, convert them here.
-//
-// Mock mode is on by default. Set VITE_USE_MOCK=false in .env to use the real API.
+// Pages and components only depend on the types returned here. The Postgres-backed API is the
+// default; set VITE_USE_MOCK=true (or run npm run dev:mock) for isolated UI work.
 
 import { COMMENTS } from "../data/mockComments";
 import { HELP_HOTSPOTS, MY_HISTORY, TRACK2_ISSUES, VOLUNTEER_EVENTS } from "../data/mockData";
 import { DAILY_VOTES, vancouverToday } from "../lib/issues";
 import type { Comment, CommentTarget, HelpHotspot, NewEvent, Track2Issue, VolunteerEvent, VolunteerRecord, Vote, VoteBudget } from "../types";
 
-export const USE_MOCK = import.meta.env.VITE_USE_MOCK !== "false";
+export const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
 const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -55,15 +52,22 @@ async function requestOrNull<T>(path: string, init?: RequestInit): Promise<T | n
 
 const countComments = (type: CommentTarget, id: string) => COMMENTS.filter((c) => c.targetType === type && c.targetId === id).length;
 
+function resolveApiAsset(path: string): string {
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${API_BASE.replace(/\/$/, "")}/${path.replace(/^\//, "")}`;
+}
+
+function normalizeEvent(event: VolunteerEvent): VolunteerEvent {
+  return event.photoUrl ? { ...event, photoUrl: resolveApiAsset(event.photoUrl) } : event;
+}
+
 /** Track 1: City events, local org events and events started from a hotspot. */
 export async function getVolunteerEvents(): Promise<VolunteerEvent[]> {
   if (USE_MOCK) {
     await wait(300);
     return VOLUNTEER_EVENTS.map((e) => ({ ...e, commentCount: countComments("event", e.id) }));
   }
-  // TODO(backend): GET /events → seed events + the app's `events` table, mapped to VolunteerEvent,
-  // with lat/lng, createdAt, popularity (searches + opens), commentCount, hotspotId and the current user's `going`.
-  return request<VolunteerEvent[]>("/events");
+  return (await request<VolunteerEvent[]>("/events")).map(normalizeEvent);
 }
 
 /** Spots that keep getting reported and neighbours could clean up, from gold_help_hotspots. */
@@ -95,9 +99,7 @@ export async function createEvent(input: NewEvent): Promise<VolunteerEvent> {
     VOLUNTEER_EVENTS.push(e);
     return { ...e };
   }
-  // TODO(backend): POST /events. Needs sign-in; the organiser comes from the session.
-  // Then call the n8n "new event" webhook (plan.md section 9).
-  return request<VolunteerEvent>("/events", { method: "POST", body: JSON.stringify(input) });
+  return normalizeEvent(await request<VolunteerEvent>("/events", { method: "POST", body: JSON.stringify(input) }));
 }
 
 /** One event, or null if it doesn't exist. */
@@ -107,8 +109,8 @@ export async function getVolunteerEvent(id: string): Promise<VolunteerEvent | nu
     const e = VOLUNTEER_EVENTS.find((x) => x.id === id);
     return e ? { ...e } : null;
   }
-  // TODO(backend): GET /events/:id, 404 → null.
-  return requestOrNull<VolunteerEvent>(`/events/${encodeURIComponent(id)}`);
+  const event = await requestOrNull<VolunteerEvent>(`/events/${encodeURIComponent(id)}`);
+  return event ? normalizeEvent(event) : null;
 }
 
 /** Track 2: issues only the City can fix, with vote counts and the current user's vote. */
@@ -130,7 +132,6 @@ export async function getTrack2Issue(id: string): Promise<Track2Issue | null> {
     const i = TRACK2_ISSUES.find((x) => x.issue_id === id);
     return i ? { ...i } : null;
   }
-  // TODO(backend): GET /issues/:id, 404 → null.
   return requestOrNull<Track2Issue>(`/issues/${encodeURIComponent(id)}`);
 }
 
@@ -141,7 +142,6 @@ export async function setGoing(eventId: string, on: boolean): Promise<void> {
     if (e) e.going = on; // kept until reload, so the feed and the detail page agree
     return;
   }
-  // TODO(backend): insert or delete the user's row in `rsvps`.
   await request<void>(`/events/${encodeURIComponent(eventId)}/rsvp`, {
     method: on ? "POST" : "DELETE",
   });
@@ -153,8 +153,6 @@ export async function getMyHistory(): Promise<VolunteerRecord[]> {
     await wait(200);
     return [...MY_HISTORY].sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
   }
-  // TODO(backend): GET /me/history → the user's rsvps on events with done_at set.
-  // hours = the host's count if they recorded one, otherwise the event's length.
   return request<VolunteerRecord[]>("/me/history");
 }
 
@@ -174,7 +172,6 @@ export async function getComments(type: CommentTarget, id: string): Promise<Comm
       (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt), // not string order: offsets differ
     );
   }
-  // TODO(backend): GET /events/:id/comments or /issues/:id/comments, from the `comments` table, oldest first.
   return request<Comment[]>(commentsPath(type, id));
 }
 
@@ -186,8 +183,6 @@ export async function addComment(type: CommentTarget, id: string, body: string):
     COMMENTS.push(c);
     return c;
   }
-  // TODO(backend): POST /events/:id/comments or /issues/:id/comments with { body }.
-  // Needs sign-in. The author comes from the session, never from the request body.
   return request<Comment>(commentsPath(type, id), { method: "POST", body: JSON.stringify({ body }) });
 }
 
