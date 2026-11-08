@@ -1,3 +1,4 @@
+import { MessageCircle } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { categoryStyle, KIND_LABELS } from '../data/categories'
 import { formatKm } from '../lib/geo'
@@ -14,8 +15,11 @@ interface Props {
 export default function EventTile({ event, ratio, distanceKm }: Props) {
   const style = categoryStyle(event.category)
   const Icon = style.icon
-  const when = new Date(event.startsAt).toLocaleDateString('en-CA', { timeZone: TZ, month: 'short', day: 'numeric' })
-  const meta = [distanceKm !== undefined ? formatKm(distanceKm) : null, event.sample ? 'Sample' : null].filter(Boolean).join(' · ')
+  const start = new Date(event.startsAt)
+  const when = start.toLocaleDateString('en-CA', { timeZone: TZ, month: 'short', day: 'numeric' })
+  const time = start.toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' }).replace(':00', '').replace(' ', '').toLowerCase()
+  // where and when, the two things people decide on
+  const meta = [distanceKm !== undefined ? formatKm(distanceKm) : event.localArea, time].join(' · ')
 
   return (
     <Link className="tile" to={`/volunteer/${encodeURIComponent(event.id)}`}>
@@ -26,7 +30,16 @@ export default function EventTile({ event, ratio, distanceKm }: Props) {
       <div className="tile-body">
         <p className="eyebrow">{KIND_LABELS[event.kind].label}</p>
         <h3>{event.title}</h3>
-        {meta && <p className="tile-meta">{meta}</p>}
+        {event.hotspot && <p className="tile-why">Reported {event.hotspot.timesReported}× here</p>}
+        <p className="tile-foot">
+          <span className="tile-meta">{meta}</span>
+          {!!event.commentCount && (
+            <span className="comment-count" aria-label={`${event.commentCount} comments`}>
+              <MessageCircle size={13} aria-hidden="true" />
+              {event.commentCount}
+            </span>
+          )}
+        </p>
       </div>
     </Link>
   )

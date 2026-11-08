@@ -1,3 +1,4 @@
+import { MessageCircle } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { categoryStyle } from '../data/categories'
 import { formatKm } from '../lib/geo'
@@ -30,7 +31,15 @@ export default function IssueRow({ issue, rank, distanceKm, onVote }: Props) {
           <p className="eyebrow">{style.label}</p>
           <h3>{issue.request_type.replace(/ Case$/, '')}</h3>
           <p className="tile-meta">{issue.address ?? issue.local_area}</p>
-          <p className={`tile-meta ${issue.days_open >= 14 ? 'overdue' : ''}`}>{meta}</p>
+          <p className="tile-foot">
+            <span className={`tile-meta ${issue.days_open >= 14 ? 'overdue' : ''}`}>{meta}</span>
+            {!!issue.comment_count && (
+              <span className="comment-count" aria-label={`${issue.comment_count} comments`}>
+                <MessageCircle size={13} aria-hidden="true" />
+                {issue.comment_count}
+              </span>
+            )}
+          </p>
         </div>
       </Link>
       <div className="issue-row-vote">

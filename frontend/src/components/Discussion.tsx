@@ -2,6 +2,7 @@ import { TriangleAlert } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { addComment, getComments } from '../api/client'
 import { AUTHOR_BADGES, COMMENT_MAX, formatPosted } from '../lib/comments'
+import { useFeed } from '../state/feed'
 import type { Comment, CommentTarget } from '../types'
 
 interface Props {
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function Discussion({ type, id }: Props) {
+  const { requireSignIn, commentAdded } = useFeed()
   const [comments, setComments] = useState<Comment[] | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
@@ -27,21 +29,26 @@ export default function Discussion({ type, id }: Props) {
     }
   }, [type, id, reloadKey])
 
-  async function submit(e: FormEvent) {
-    e.preventDefault()
-    const body = text.trim()
-    if (!body || sending) return
+  async function post(body: string) {
     setSending(true)
     setSendError(false)
     try {
       const c = await addComment(type, id, body)
       setComments((prev) => [...(prev ?? []), c])
       setText('')
+      commentAdded(type, id) // keeps the count on the feed card right
     } catch {
       setSendError(true)
     } finally {
       setSending(false)
     }
+  }
+
+  function submit(e: FormEvent) {
+    e.preventDefault()
+    const body = text.trim()
+    if (!body || sending) return
+    requireSignIn('comment', () => post(body))
   }
 
   return (

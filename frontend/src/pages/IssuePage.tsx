@@ -1,5 +1,5 @@
 import { ChevronLeft } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { getTrack2Issue } from "../api/client";
 import Discussion from "../components/Discussion";
@@ -14,7 +14,7 @@ export default function IssuePage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { issues, setMyVote } = useFeed();
+  const { issues, setMyVote, requireSignIn } = useFeed();
 
   // Opened from the feed: use the issue we already have. Opened from a link: fetch it.
   const cached = issues.items?.find((i) => i.issue_id === id);
@@ -22,6 +22,7 @@ export default function IssuePage() {
   const [error, setError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const inFeed = Boolean(cached);
+  const lastTap = useRef(0);
 
   useEffect(() => {
     if (inFeed) return;
@@ -37,13 +38,17 @@ export default function IssuePage() {
   const issue = cached ?? fetched;
 
   function vote(issueId: string, value: Vote) {
-    if (inFeed) {
-      setMyVote(issueId, value);
-      return;
-    }
-    const before = fetched?.my_vote ?? 0;
-    setFetched((i) => (i ? { ...i, my_vote: value } : i));
-    setMyVote(issueId, value).then((ok) => !ok && setFetched((i) => (i ? { ...i, my_vote: before } : i)));
+    requireSignIn("vote", () => {
+      if (inFeed) {
+        setMyVote(issueId, value);
+        return;
+      }
+      // same guard as the feed: only the latest tap may roll back
+      const n = ++lastTap.current;
+      const before = fetched?.my_vote ?? 0;
+      setFetched((i) => (i ? { ...i, my_vote: value } : i));
+      setMyVote(issueId, value).then((ok) => !ok && lastTap.current === n && setFetched((i) => (i ? { ...i, my_vote: before } : i)));
+    });
   }
 
   // "default" means this page was opened directly, not from inside the app
@@ -109,9 +114,6 @@ export default function IssuePage() {
                 <dd>{issue.open_cases}</dd>
               </dl>
 
-              <p className="muted small">Does this affect you? Votes decide the order of the list neighbours send to Council.</p>
-              <VoteControl issue={issue} onVote={vote} />
-
               <div className="card-action">
                 <a className="action-button secondary" href={VAN311_URL} target="_blank" rel="noopener noreferrer">
                   Report it in Van311 ↗
@@ -125,6 +127,13 @@ export default function IssuePage() {
           </>
         )}
       </main>
+
+      {issue && (
+        <div className="action-bar">
+          <p className="muted small">Does this affect you? Votes set the order of the list neighbours send to Council.</p>
+          <VoteControl issue={issue} onVote={vote} />
+        </div>
+      )}
     </div>
   );
 }

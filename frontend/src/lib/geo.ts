@@ -1,26 +1,7 @@
 import type { LatLng } from '../types'
 
-export interface City {
-  name: string
-  centre: LatLng
-  available: boolean // we only have City of Vancouver 311 data so far
-}
-
-// Metro Vancouver, by population. Only Vancouver has data; the rest show "Coming soon".
-export const CITIES: City[] = [
-  { name: 'Vancouver', centre: { lat: 49.2606, lng: -123.114 }, available: true },
-  { name: 'Surrey', centre: { lat: 49.1913, lng: -122.849 }, available: false },
-  { name: 'Burnaby', centre: { lat: 49.2488, lng: -122.9805 }, available: false },
-  { name: 'Richmond', centre: { lat: 49.1666, lng: -123.1336 }, available: false },
-  { name: 'Coquitlam', centre: { lat: 49.2838, lng: -122.7932 }, available: false },
-  { name: 'Delta', centre: { lat: 49.0847, lng: -123.0587 }, available: false },
-  { name: 'North Vancouver', centre: { lat: 49.3165, lng: -123.0688 }, available: false },
-  { name: 'New Westminster', centre: { lat: 49.2057, lng: -122.911 }, available: false },
-  { name: 'West Vancouver', centre: { lat: 49.3286, lng: -123.1602 }, available: false },
-  { name: 'Port Moody', centre: { lat: 49.2849, lng: -122.8678 }, available: false },
-]
-
-export const DEFAULT_CITY = CITIES[0]!
+// Only City of Vancouver data so far. The centre is City Hall, used for distances when "Near me" is off.
+export const CITY = { name: 'Vancouver', centre: { lat: 49.2606, lng: -123.114 } }
 
 // Same box the pipeline uses for "in Vancouver" (t311_pipeline.py). Checking the nearest city centre
 // instead would put east Vancouver in Burnaby.

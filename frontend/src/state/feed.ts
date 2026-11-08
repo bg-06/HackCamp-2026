@@ -1,7 +1,5 @@
 import { createContext, useContext } from "react";
-import type { LocateStatus } from "../components/LocationSheet";
-import type { City } from "../lib/geo";
-import type { FeedTab, LatLng, SortKey, Track2Issue, VolunteerEvent, Vote } from "../types";
+import type { CommentTarget, FeedTab, HelpHotspot, LatLng, SortKey, Track2Issue, VolunteerEvent, Vote } from "../types";
 
 // No items and no error = still loading.
 export interface Loaded<T> {
@@ -9,17 +7,21 @@ export interface Loaded<T> {
   error?: string;
 }
 
+export type LocateStatus = "off" | "locating" | "on" | "outside" | "denied" | "unavailable" | "insecure";
+
 // Lives above the routes, so opening a card and coming back keeps the lists, location, sort and scroll.
 export interface Feed {
   events: Loaded<VolunteerEvent>;
   issues: Loaded<Track2Issue>;
+  hotspots: Loaded<HelpHotspot>;
   reload: () => void;
+  addEvent: (e: VolunteerEvent) => void;
+  commentAdded: (type: CommentTarget, id: string) => void;
 
-  city: City;
-  setCity: (c: City) => void;
+  // "Near me": your position if you turned it on, otherwise null
   here: LatLng | null;
   locStatus: LocateStatus;
-  locate: () => void;
+  toggleNearMe: () => void;
 
   eventSort: SortKey;
   setEventSort: (s: SortKey) => void;
@@ -36,6 +38,15 @@ export interface Feed {
   // Update the list right away, then the backend. Resolves false (and undoes it) if the request failed.
   setMyVote: (issueId: string, value: Vote) => Promise<boolean>;
   setGoing: (eventId: string, on: boolean) => Promise<boolean>;
+
+  // Voting, signing up, commenting and starting an event need sign-in. requireSignIn runs the action
+  // straight away if signed in; otherwise it asks first and runs it after sign-in.
+  signedIn: boolean;
+  requireSignIn: (reason: string, action: () => void) => void;
+  signIn: () => void;
+  signOut: () => void;
+  signInPrompt: string | null; // the reason being asked for, while the prompt is open
+  cancelSignIn: () => void;
 }
 
 export const FeedContext = createContext<Feed | null>(null);

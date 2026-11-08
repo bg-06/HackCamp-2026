@@ -7,8 +7,8 @@
 // Mock mode is on by default. Set VITE_USE_MOCK=false in .env to use the real API.
 
 import { COMMENTS } from "../data/mockComments";
-import { TRACK2_ISSUES, VOLUNTEER_EVENTS } from "../data/mockData";
-import type { Comment, CommentTarget, Track2Issue, VolunteerEvent, Vote } from "../types";
+import { HELP_HOTSPOTS, MY_HISTORY, TRACK2_ISSUES, VOLUNTEER_EVENTS } from "../data/mockData";
+import type { Comment, CommentTarget, HelpHotspot, NewEvent, Track2Issue, VolunteerEvent, VolunteerRecord, Vote } from "../types";
 
 export const USE_MOCK = import.meta.env.VITE_USE_MOCK !== "false";
 const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
@@ -42,15 +42,51 @@ async function requestOrNull<T>(path: string): Promise<T | null> {
   return res.json() as Promise<T>;
 }
 
+const countComments = (type: CommentTarget, id: string) => COMMENTS.filter((c) => c.targetType === type && c.targetId === id).length;
+
 /** Track 1: City events, local org events and events started from a hotspot. */
 export async function getVolunteerEvents(): Promise<VolunteerEvent[]> {
   if (USE_MOCK) {
     await wait(300);
-    return VOLUNTEER_EVENTS.map((e) => ({ ...e }));
+    return VOLUNTEER_EVENTS.map((e) => ({ ...e, commentCount: countComments("event", e.id) }));
   }
   // TODO(backend): GET /events → seed events + the app's `events` table, mapped to VolunteerEvent,
-  // with lat/lng, createdAt, popularity (searches + opens) and the current user's `going`.
+  // with lat/lng, createdAt, popularity (searches + opens), commentCount, hotspotId and the current user's `going`.
   return request<VolunteerEvent[]>("/events");
+}
+
+/** Spots that keep getting reported and neighbours could clean up, from gold_help_hotspots. */
+export async function getHelpHotspots(): Promise<HelpHotspot[]> {
+  if (USE_MOCK) {
+    await wait(300);
+    return HELP_HOTSPOTS.map((h) => ({ ...h }));
+  }
+  // TODO(backend): GET /hotspots → gold_help_hotspots with lat/lng (H3 cell centre), most reported first.
+  return request<HelpHotspot[]>("/hotspots");
+}
+
+/** Start an event, usually from a hotspot. The signed-in user is the host. */
+export async function createEvent(input: NewEvent): Promise<VolunteerEvent> {
+  if (USE_MOCK) {
+    await wait(300);
+    const e: VolunteerEvent = {
+      ...input,
+      id: `local-event-${VOLUNTEER_EVENTS.length}-${Date.now()}`,
+      kind: "hotspot",
+      organiser: "You",
+      spotsTaken: 0,
+      going: true, // the host counts as going
+      sample: false,
+      createdAt: new Date().toISOString(),
+      popularity: 0,
+      commentCount: 0,
+    };
+    VOLUNTEER_EVENTS.push(e);
+    return { ...e };
+  }
+  // TODO(backend): POST /events. Needs sign-in; the organiser comes from the session.
+  // Then call the n8n "new event" webhook (plan.md section 9).
+  return request<VolunteerEvent>("/events", { method: "POST", body: JSON.stringify(input) });
 }
 
 /** One event, or null if it doesn't exist. */
@@ -68,9 +104,9 @@ export async function getVolunteerEvent(id: string): Promise<VolunteerEvent | nu
 export async function getTrack2Issues(): Promise<Track2Issue[]> {
   if (USE_MOCK) {
     await wait(300);
-    return TRACK2_ISSUES.map((i) => ({ ...i }));
+    return TRACK2_ISSUES.map((i) => ({ ...i, comment_count: countComments("issue", i.issue_id) }));
   }
-  // TODO(backend): GET /issues → gold_track2_issues joined with `votes`.
+  // TODO(backend): GET /issues → gold_track2_issues joined with `votes` and a comment_count.
   // up_votes/down_votes should NOT include the current user's vote; that goes in my_vote.
   return request<Track2Issue[]>("/issues");
 }
@@ -97,6 +133,17 @@ export async function setGoing(eventId: string, on: boolean): Promise<void> {
   await request<void>(`/events/${encodeURIComponent(eventId)}/rsvp`, {
     method: on ? "POST" : "DELETE",
   });
+}
+
+/** What the signed-in user has already volunteered at, newest first. */
+export async function getMyHistory(): Promise<VolunteerRecord[]> {
+  if (USE_MOCK) {
+    await wait(200);
+    return [...MY_HISTORY].sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
+  }
+  // TODO(backend): GET /me/history → the user's rsvps on events with done_at set.
+  // hours = the host's count if they recorded one, otherwise the event's length.
+  return request<VolunteerRecord[]>("/me/history");
 }
 
 // ---------- Comments (the discussion under each post) ----------
