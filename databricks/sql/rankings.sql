@@ -35,3 +35,19 @@ LEFT JOIN bbb.gold.cases_enriched c
   ON c.category = e.category AND array_contains(h3_kring(e.h3_r9, 1), c.h3_r9)
 WHERE e.done_at IS NOT NULL AND e.h3_r9 IS NOT NULL
 GROUP BY ALL;
+
+-- @requires bbb_app.public.events
+-- @requires bbb_app.public.event_images
+-- App listings are ingested separately from 311. Keep a Databricks snapshot of all
+-- non-sample listings, including completed and withdrawn records, for auditing.
+-- The app continues to serve current records and image bytes from Postgres.
+CREATE OR REPLACE TABLE bbb.gold.volunteer_opportunities
+COMMENT 'App volunteer listings, locations and image metadata refreshed from Postgres'
+AS SELECT CAST(e.id AS STRING) AS event_id, e.title, e.organiser, e.kind, e.category,
+          e.starts_at, e.ends_at, e.location, e.local_area, e.latitude, e.longitude,
+          e.h3_r9, e.signup_url, e.done_at, e.source_withdrawn_at, e.created_at,
+          i.event_id IS NOT NULL AS has_image, i.source_url AS image_source_url,
+          i.attribution AS image_attribution
+FROM bbb_app.public.events e
+LEFT JOIN bbb_app.public.event_images i ON e.id = i.event_id
+WHERE e.is_sample = false;
