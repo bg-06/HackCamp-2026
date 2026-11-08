@@ -7,8 +7,8 @@ import IssueRow from "../components/IssueRow";
 import VotesLeft from "../components/VotesLeft";
 import MasonryFeed from "../components/MasonryFeed";
 import TopBar from "../components/TopBar";
-import { coverRatio, requestTypeInSentence } from "../lib/cover";
-import { hotspotKind } from "../lib/hotspots";
+import { coverRatio } from "../lib/cover";
+import { mergeNeighbours, spreadByArea } from "../lib/hotspots";
 import { CITY, distanceTo, formatKm } from "../lib/geo";
 import { issueScore, VAN311_URL } from "../lib/issues";
 import { EVENT_SORTS, ISSUE_SORTS, sortEvents, sortIssues } from "../lib/sort";
@@ -51,7 +51,10 @@ export default function HomePage() {
     requireSignIn,
   } = useFeed();
   const [sortOpen, setSortOpen] = useState(false);
-  const [hotspotLimit, setHotspotLimit] = useState(20);
+  const [area, setArea] = useState(() => localStorage.getItem('issue-area') ?? '');
+  const [category, setCategory] = useState('');
+  const [myVotesOnly, setMyVotesOnly] = useState(false);
+  const [showAllHotspots, setShowAllHotspots] = useState(false);
   const contentRef = useRef<HTMLElement>(null);
 
   // Back from a card: put the list where it was
@@ -72,18 +75,20 @@ export default function HomePage() {
     issueSort,
     issueQ,
     here ? `${here.lat},${here.lng}` : "",
+    area, category, String(myVotesOnly),
+    myVotesOnly ? (issues.items ?? []).filter(i => i.my_vote === 1).map(i => i.issue_id).join() : '',
     events.items ? "events" : "",
     (issues.items ?? []).map((i) => i.issue_id).join(),
   ].join("|");
   const [issueOrder, setIssueOrder] = useState<{ key: string; ids: string[]; rank: Map<string, number> } | null>(null);
   if (issues.items && issueOrder?.key !== orderKey) {
     const matching = issues.items.filter(
-      (i) => !issueQ || `${i.request_type} ${i.address ?? ""} ${i.local_area}`.toLowerCase().includes(issueQ),
+      (i) => (!issueQ || `${i.request_type} ${i.address ?? ""} ${i.local_area}`.toLowerCase().includes(issueQ)) && (!area || i.local_area === area) && (!category || i.category === category) && (!myVotesOnly || i.my_vote === 1),
     );
     const byScore = [...issues.items].sort((a, b) => issueScore(b).score - issueScore(a).score);
     setIssueOrder({
       key: orderKey,
-      ids: sortIssues(matching, issueSort, ctx).map((i) => i.issue_id),
+      ids: sortIssues(matching, issueSort, ctx).sort((a, b) => issueSort === 'recommended' && here && !area ? Number((distanceTo(here, a) ?? Infinity) > 3) - Number((distanceTo(here, b) ?? Infinity) > 3) : 0).map((i) => i.issue_id),
       rank: new Map(byScore.map((i, n) => [i.issue_id, n + 1])),
     });
   }
@@ -133,9 +138,13 @@ export default function HomePage() {
 
   // Spots that keep getting reported and have nothing planned yet
   const planned = new Set((events.items ?? []).map((e) => e.hotspotId).filter(Boolean));
-  const openHotspots = (hotspots.items ?? [])
-    .filter((h) => !planned.has(h.id))
-    .sort((a, b) => (here ? (distanceTo(here, a) ?? Infinity) - (distanceTo(here, b) ?? Infinity) : b.times_reported - a.times_reported));
+  // Touching cells with the same problem are one place. With your location: nearest first.
+  // Without: the most persistent place in each neighbourhood first, so it isn't all Downtown.
+  const places = mergeNeighbours(hotspots.items ?? []).filter((p) => !p.cellIds.some((id) => planned.has(id)));
+  const openHotspots = here
+    ? places.sort((a, b) => (distanceTo(here, a.hotspot) ?? Infinity) - (distanceTo(here, b.hotspot) ?? Infinity))
+    : spreadByArea(places);
+  const hotspotsShown = showAllHotspots ? openHotspots : openHotspots.slice(0, 3);
   const sampleCount = (events.items ?? []).filter((e) => e.sample).length;
 
   function pickSort(key: SortKey) {
@@ -182,6 +191,18 @@ export default function HomePage() {
     <div className="page">
       <header className={`home-header track-${tab}`}>
         <TopBar tab={tab} searchOpen={searchOpen[tab]} onToggleSearch={toggleSearch} menuOpen={sortOpen} onToggleMenu={() => setSortOpen(!sortOpen)} />
+
+        {tab === 'issues' && <div className="filter-row issue-filters">
+          <label>Neighbourhood <select value={area} onChange={e => { setArea(e.target.value); localStorage.setItem('issue-area', e.target.value) }}>
+            <option value="">All Vancouver</option>
+            {[...new Set((issues.items ?? []).map(i => i.local_area).filter(Boolean))].sort().map(a => <option key={a} value={a}>{a}</option>)}
+          </select></label>
+          <label>Category <select value={category} onChange={e => setCategory(e.target.value)}>
+            <option value="">All categories</option>
+            {[...new Set((issues.items ?? []).map(i => i.category).filter(Boolean))].sort().map(c => <option key={c} value={c}>{c}</option>)}
+          </select></label>
+          <button className={`filter-chip ${myVotesOnly ? 'selected' : ''}`} aria-pressed={myVotesOnly} onClick={() => setMyVotesOnly(!myVotesOnly)}>My votes</button>
+        </div>}
 
         {sortOpen && (
           <div className="filter-row" role="group" aria-label="Sort by">
@@ -250,7 +271,7 @@ export default function HomePage() {
             <h2>What needs fixing in {CITY.name}</h2>
             <p>Prioritize issues the City can fix.</p>
             <VotesLeft />
-            <details className="score-explainer"><summary>How scores work</summary><p>Scores combine votes, time open, and reports.</p></details>
+            <p className="muted small">Filter by neighbourhood or turn on Near me. The number is a priority score: votes, plus how long it’s been open and how often it’s reported.</p>
             <a className="text-link" href={VAN311_URL} target="_blank" rel="noopener noreferrer">
               Report something new in Van311 ↗
             </a>
@@ -264,22 +285,40 @@ export default function HomePage() {
               <p className="muted small">{openHotspots.length} reported spots, nothing planned</p>
             </div>
             <ul className="help-strip" tabIndex={0} aria-label="Spots that need help">
-              {openHotspots.slice(0, hotspotLimit).map((h) => (
-                <li key={h.id} className="help-card">
-                  <Link className="help-card-link" to={`/volunteer/new?hotspot=${encodeURIComponent(h.id)}`}>
+              {hotspotsShown.map((p) => {
+                const report = p.action === "report";
+                const body = (
+                  <>
                     <span className="help-card-top">
-                      <span className="help-count">{h.times_reported} reports</span>
-                      {here && h.lat !== undefined && <span className="muted small">{formatKm(distanceTo(here, h)!)}</span>}
+                      <span className="help-count">{p.reports} reports</span>
+                      {here && p.hotspot.lat !== undefined && <span className="muted small">{formatKm(distanceTo(here, p.hotspot)!)}</span>}
                     </span>
-                    <span className="row-title">{requestTypeInSentence(h.request_type)}</span>
-                    <span className="muted small">{h.near ?? h.local_area} · {h.months_seen} months</span>
-                    <span className="help-start">{hotspotKind(h.request_type, h.category).action === 'report' ? 'Report this' : 'Start an event'} <span aria-hidden="true">→</span></span>
-                  </Link>
-                </li>
-              ))}
-              {hotspotLimit < openHotspots.length && (
+                    <span className="row-title">{p.label}</span>
+                    <span className="muted small">{p.hotspot.near ?? p.hotspot.local_area} · {p.monthsSeen} of 12 months</span>
+                    <span className="help-start">
+                      {report ? "Report to the City" : p.action === "walk" ? "Plan a walk" : "Start a cleanup"} <span aria-hidden="true">{report ? "↗" : "→"}</span>
+                    </span>
+                  </>
+                );
+                return (
+                  <li key={p.id} className="help-card">
+                    {report ? (
+                      <a className="help-card-link" href={VAN311_URL} target="_blank" rel="noopener noreferrer">
+                        {body}
+                      </a>
+                    ) : (
+                      <Link className="help-card-link" to={`/volunteer/new?hotspot=${encodeURIComponent(p.id)}`}>
+                        {body}
+                      </Link>
+                    )}
+                  </li>
+                );
+              })}
+              {!showAllHotspots && openHotspots.length > hotspotsShown.length && (
                 <li className="help-card help-more">
-                  <button className="chip-button" onClick={() => setHotspotLimit((limit) => limit + 20)}>Show more spots</button>
+                  <button className="chip-button" onClick={() => setShowAllHotspots(true)}>
+                    Show all {openHotspots.length}
+                  </button>
                 </li>
               )}
             </ul>

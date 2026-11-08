@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { latLngToCell } from 'h3-js'
 import { config } from 'dotenv'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -86,11 +87,11 @@ async function upsert(tx: QueryTag, listing: VolunteerListing, image?: Downloade
   await tx`
     INSERT INTO events (
       id, kind, title, organiser, category, starts_at, ends_at, location, local_area,
-      latitude, longitude, spots_total, what_to_bring, signup_url, is_sample, created_by
+      latitude, longitude, h3_r9, spots_total, what_to_bring, signup_url, is_sample, created_by
     ) VALUES (
       ${id}, ${listing.kind}, ${listing.title}, ${listing.organiser},
       ${listing.category}, ${listing.startsAt}, ${listing.endsAt}, ${listing.location},
-      ${listing.localArea}, ${listing.latitude}, ${listing.longitude}, ${listing.spotsTotal},
+      ${listing.localArea}, ${listing.latitude}, ${listing.longitude}, ${listing.latitude !== null && listing.longitude !== null ? latLngToCell(listing.latitude, listing.longitude, 9) : null}, ${listing.spotsTotal},
       ${listing.whatToBring}, ${listing.signupUrl}, false, ${`source:${listing.source}`}
     )
     ON CONFLICT (id) DO UPDATE SET
@@ -102,8 +103,9 @@ async function upsert(tx: QueryTag, listing: VolunteerListing, image?: Downloade
       ends_at = EXCLUDED.ends_at,
       location = EXCLUDED.location,
       local_area = EXCLUDED.local_area,
-      latitude = EXCLUDED.latitude,
-      longitude = EXCLUDED.longitude,
+      latitude = COALESCE(EXCLUDED.latitude, CASE WHEN events.location = EXCLUDED.location THEN events.latitude END),
+      longitude = COALESCE(EXCLUDED.longitude, CASE WHEN events.location = EXCLUDED.location THEN events.longitude END),
+      h3_r9 = COALESCE(EXCLUDED.h3_r9, CASE WHEN events.location = EXCLUDED.location THEN events.h3_r9 END),
       spots_total = EXCLUDED.spots_total,
       what_to_bring = EXCLUDED.what_to_bring,
       signup_url = EXCLUDED.signup_url,
@@ -140,7 +142,7 @@ try {
       WHERE created_by = ${`source:${sourceId}`} AND source_withdrawn_at IS NULL AND done_at IS NULL`
     console.log(`${sourceId}: retired ${result.count} listings`)
   }
-  for (const source of volunteerSources) {
+  for (const source of volunteerSources()) {
     try {
       const snapshot = await source.fetchListings()
       if (!snapshot.validated) throw new Error(`${source.id}: source snapshot was not validated`)
@@ -157,6 +159,15 @@ try {
             }
           }
           ids.push(await upsert(tx as unknown as QueryTag, listing, image))
+          if (source.id === 'meetup-lower-mainland-green-team') {
+            await tx`INSERT INTO raw_volunteer_events
+              (source, source_key, record_type, title, organiser, starts_at, ends_at, location, category, signup_url, source_url, raw_record, fetched_at)
+              VALUES (${listing.source}, ${listing.sourceKey}, 'upcoming_event', ${listing.title}, ${listing.organiser}, ${listing.startsAt}, ${listing.endsAt}, ${listing.location}, ${listing.category}, ${listing.signupUrl}, ${listing.signupUrl}, ${sql.json(listing as never)}, now())
+              ON CONFLICT (source, source_key) DO UPDATE SET title = EXCLUDED.title, organiser = EXCLUDED.organiser,
+                starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, location = EXCLUDED.location,
+                category = EXCLUDED.category, signup_url = EXCLUDED.signup_url, source_url = EXCLUDED.source_url,
+                raw_record = EXCLUDED.raw_record, fetched_at = now()`
+          }
         }
         const owner = `source:${source.id}`
         const activeMissing = sql`
@@ -168,6 +179,7 @@ try {
             OR (starts_at IS NULL AND ends_at IS NULL AND kind IN ('city', 'org') AND signup_url IS NOT NULL)
           )
         `
+        if (snapshot.allowWithdrawal === false) return
         if (ids.length) {
           await tx`UPDATE events SET source_withdrawn_at = now() WHERE ${activeMissing} AND id NOT IN ${sql(ids)}`
         } else {

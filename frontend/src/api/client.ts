@@ -11,9 +11,9 @@ import type { Comment, CommentTarget, HelpHotspot, NewEvent, Track2Issue, Volunt
 export const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
 export type Suggestion = { id: string; org_name: string; title: string; body: string; payload: { event_draft: { hotspot_id: string; title: string; what_to_bring?: string } } };
 export type Briefing = { id: string; localArea: string; title: string; body: string; weekOf: string | null };
-export const getSuggestions = () => request<Suggestion[]>("/me/suggestions");
+export const getSuggestions = () => USE_MOCK ? Promise.resolve([] as Suggestion[]) : request<Suggestion[]>("/me/suggestions");
 export const dismissSuggestion = (id: string) => request(`/me/suggestions/${encodeURIComponent(id)}/dismiss`, { method: "POST" });
-export const getBriefings = () => request<Briefing[]>("/briefings");
+export const getBriefings = () => USE_MOCK ? Promise.resolve([] as Briefing[]) : request<Briefing[]>("/briefings");
 const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

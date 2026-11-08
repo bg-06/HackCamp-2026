@@ -10,7 +10,10 @@ export const EVENT_SORTS: { key: SortKey; label: string }[] = [
 ]
 
 export const ISSUE_SORTS: { key: SortKey; label: string }[] = [
-  ...EVENT_SORTS,
+  { key: 'recommended', label: 'For you' },
+  { key: 'newest', label: 'Newest' },
+  { key: 'popular', label: 'Recent activity' },
+  { key: 'distance', label: 'Nearest' },
   { key: 'longest', label: 'Longest unsolved' },
 ]
 
@@ -66,14 +69,14 @@ export function sortIssues(
     case 'longest':
       return out.sort((a, b) => b.days_open - a.days_open)
     case 'popular':
-      return out.sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0))
+      return out.sort((a, b) => (b.recent_activity ?? 0) - (a.recent_activity ?? 0) || issueScore(b).score - issueScore(a).score)
     case 'distance':
       return out.sort(byDistance(ctx.from))
     default: {
       // For you: categories you care about first, then the most pressing (live vote score)
       const liked = interests(ctx.events, ctx.issues)
       return out.sort(
-        (a, b) => Number(liked.has(b.category)) - Number(liked.has(a.category)) || issueScore(b).score - issueScore(a).score,
+        (a, b) => Number(liked.has(b.category)) - Number(liked.has(a.category)) || (b.recent_activity ?? 0) - (a.recent_activity ?? 0) || issueScore(b).score - issueScore(a).score,
       )
     }
   }

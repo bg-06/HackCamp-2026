@@ -154,12 +154,12 @@ def test_payload_contract_keys_and_values():
     assert set(p["hotspot"]) == {"h3_r9", "request_type", "category",
                                  "times_reported", "months_seen", "last_reported"}
     assert p["hotspot"]["last_reported"].startswith("2026-11-05T")
-    assert p["hotspot"]["last_reported"].endswith("-08:00")
+    assert p["hotspot"]["last_reported"].endswith("-07:00")
     d = p["event_draft"]
     assert set(d) == {"kind", "title", "category", "local_area", "latitude",
                       "longitude", "hotspot_id", "what_to_bring", "signup_url"}
     assert d["kind"] == "hotspot"
-    assert d["hotspot_id"] == f"{CELL_A}:{DUMP}"
+    assert d["hotspot_id"] == f"{CELL_A}|{DUMP}"
     assert d["signup_url"] is None
     lat, lng = h3.cell_to_latlng(CELL_A)
     assert (d["latitude"], d["longitude"]) == (lat, lng)
@@ -180,7 +180,7 @@ def test_dedupe_key_is_stable_within_iso_week_and_changes_next_week():
 
 def test_last_reported_gets_vancouver_offset():
     naive = suggest([hs(last=datetime(2026, 11, 5, 10, 0))], [], [], TODAY)[0]
-    assert naive["hotspot"]["last_reported"] == "2026-11-05T10:00:00-08:00"
+    assert naive["hotspot"]["last_reported"] == "2026-11-05T10:00:00-07:00"
     aware = suggest([hs(last=datetime(2026, 7, 5, 17, 0, tzinfo=timezone.utc))], [], [], TODAY)[0]
     assert aware["hotspot"]["last_reported"] == "2026-07-05T10:00:00-07:00"
 

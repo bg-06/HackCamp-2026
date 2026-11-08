@@ -79,6 +79,7 @@ export function parseSuggestion(input: unknown) {
   if (!Array.isArray(orgIds) || orgIds.length > 50 || !orgIds.every(id => typeof id === 'string' && id.length >= 1 && id.length <= 100))
     throw new ApiError(400, 'org_ids must be an array of up to 50 org ids')
   const draft = object(b.event_draft, 'event_draft')
+  const hotspotId = text(draft.hotspot_id, 'event_draft.hotspot_id', 500)!.replace(/^([^:|]+):/, '$1|')
   const hotspot = object(b.hotspot, 'hotspot')
   if (b.city_program !== null) object(b.city_program, 'city_program')
   return {
@@ -86,9 +87,9 @@ export function parseSuggestion(input: unknown) {
     title: text(b.title, 'title', 200)!,
     body: text(b.body, 'body', 5000)!,
     orgIds: [...new Set(orgIds as string[])],
-    hotspotId: text(draft.hotspot_id, 'event_draft.hotspot_id', 500)!,
+    hotspotId,
     dedupeKey: dedupeKey(b.dedupe_key, 'suggestion:'),
-    payload: { event_draft: draft, hotspot, city_program: b.city_program, org_ids: orgIds },
+    payload: { event_draft: { ...draft, hotspot_id: hotspotId }, hotspot, city_program: b.city_program, org_ids: orgIds },
   }
 }
 

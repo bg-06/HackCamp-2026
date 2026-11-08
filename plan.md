@@ -217,7 +217,7 @@ We can measure whether it works. Because every event is tied to a hotspot, Datab
 - **Drop from core:** filing new reports and duplicate matching. Van311 already does this. A "report in Van311" link replaces it
 - **Databricks still carries the data:** 311 hotspots and recurring issues decide what to show, `ai_classify` sorts each request type into Track 1 or Track 2, and a gold table ranks "most pressing" per area from net votes, age and recurrence
 - **App (Next.js + Postgres):** opportunities, sign-ups, votes, org profiles, and a comment thread per event as the event chat
-- **Maritime agent (optional):** suggests opportunities from recurring hotspots and nudges nearby orgs ("Your area has 4 recurring dumping spots near Trout Lake. Host a cleanup?")
+- **Block Steward agent (optional):** suggests opportunities from recurring hotspots and nudges nearby orgs ("Your area has 4 recurring dumping spots near Trout Lake. Host a cleanup?")
 
 ---
 
@@ -228,12 +228,10 @@ Ranked by how much the team wants each prize (lower total = more wanted), and wh
 | Rank | Sponsor | What wins it | Our plan |
 |---|---|---|---|
 | 1 | Databricks | "Most creative and thoughtful" use of at least one Databricks product | **Core of the project.** Pipeline, AI Functions (sorting request types into the two tracks), H3 hotspots, vote ranking, before and after impact, dashboard and Genie all run on Databricks, reading our Postgres through Lakehouse Federation |
-| 2 | Freebuff | Working project built with Freebuff, explain how it helped | Use Freebuff as the team's coding agent all weekend and keep a log (section 9) |
-| 3 | Auth0 | Creative authentication and application security | Auth0 does resident sign-in, **roles** (resident, org admin, moderator: only an org admin can post as an org), and secures every machine-to-machine call (the agent) with scoped tokens (section 7) |
-| 4 | Maritime | An AI agent deployed on Maritime, with a short demo | **Block Steward agent** in a Maritime Agent Box: spots recurring hotspots with nothing planned, suggests events to nearby orgs, posts weekly "ways to help" briefings |
-| 5 | Tailscale | Awarded through superlatives | Opt into **Community Impact** (impact statement) and **Best Design** (Figma link). nwChoice is automatic |
-| 6 | ElevenLabs | Only through Overall Winner / Beginner Overall prize packages | Aim for Overall. Optional stretch: spoken neighbourhood briefings for accessibility |
-| 8+ | Gemini | MLH swag | Used as the agent's model since it's free. Opt in, no extra work |
+| 2 | Auth0 | Creative authentication and application security | Auth0 does resident sign-in, **roles** (resident, org admin, moderator: only an org admin can post as an org), and secures every machine-to-machine call (the agent) with scoped tokens (section 7) |
+| 3 | Tailscale | Awarded through superlatives | Opt into **Community Impact** (impact statement) and **Best Design** (Figma link). nwChoice is automatic |
+| 4 | ElevenLabs | Only through Overall Winner / Beginner Overall prize packages | Aim for Overall. Optional stretch: spoken neighbourhood briefings for accessibility |
+| 5 | Gemini | MLH swag | Used as the agent's model since it's free. Opt in, no extra work |
 | Drop | Solana, Vultr, Tiger Data, Entire, GoDaddy | | Not worth the time |
 
 What changed from the previous plan and why:
@@ -241,7 +239,7 @@ What changed from the previous plan and why:
 - **The app is a plain Next.js project on Vercel** (pages and API routes in one codebase, one-command deploy). Everyone already knows the stack and there's no platform SDK to learn mid-hackathon.
 - **Postgres is the buffer on both sides of Databricks.** We use **our own Postgres**, which is already running outside Databricks. **All input lands in Postgres first**: the City's 311 data (initial load and daily fetch) and everything the app creates (events, RSVPs, votes, orgs, comments). Databricks reads it through **Lakehouse Federation** (a Unity Catalog foreign catalog, no copy job), and a `publish_gold` job task writes the clean gold tables back into Postgres as `gold_*` tables. The app only ever talks to Postgres, which is fast and has no SQL warehouse cold start.
 - **Databricks runs the AI.** Classification and summaries use Databricks AI Functions instead of calling Gemini from notebooks. No outbound calls needed from inside Databricks for the AI step.
-- **The "AI" part becomes a real agent on Maritime** instead of a batch script.
+- **The "AI" part becomes a real agent** (the Block Steward, section 8) instead of a batch script.
 - **Google Maps is swapped for MapLibre** with free tiles. No prize attached, and it avoids setting up a Google Cloud billing account.
 - **Auth0 handles resident sign-in too**, since there's no platform login any more. One login for residents (Google or email), plus an M2M token for the agent.
 
@@ -260,9 +258,8 @@ flowchart LR
     P -->|events, votes via Unity Catalog| R[Databricks: refresh ranking + impact<br/>every 15 minutes]
     P <--> F[React frontend + Express API]
     R --> E
-    S[Maritime Agent Box<br/>Block Steward] -->|Auth0 M2M token| F
+    S[Block Steward agent<br/>Python] -->|Auth0 M2M token| F
     S -->|SQL API| E
-    N -->|notifications| X[Email / Discord]
 ```
 
 In plain words:
@@ -272,7 +269,7 @@ In plain words:
 - Gold tables are copied back into Postgres (`gold_*` tables) at the end of each job run. The Next.js app reads them from Postgres for the map, area pages and vote page
 - Residents sign in with Auth0. Everything they create (events, RSVPs, votes, comments, photos) is written to Postgres, and Databricks reads it back through Unity Catalog
 - Databricks refreshes app vote rankings and event impact every 15 minutes. All scheduled work runs as Databricks jobs
-- The Block Steward agent on Maritime looks for recurring hotspots with nothing planned, suggests events to nearby orgs, and posts weekly "ways to help" briefings on area pages
+- The Block Steward agent looks for recurring hotspots with nothing planned, suggests events to nearby orgs, and posts weekly "ways to help" briefings on area pages
 - Every service-to-service call carries an Auth0 access token with specific scopes
 
 ---
@@ -287,10 +284,9 @@ In plain words:
 | Resident sign-in | Auth0 Universal Login (Google and email) with `@auth0/nextjs-auth0` |
 | Photo storage | Vercel Blob (free tier), URL stored in Postgres |
 | Map | MapLibre GL JS with free OpenFreeMap tiles, deck.gl `H3HexagonLayer` via `@deck.gl/mapbox` interleaved overlay |
-| Agent | Maritime Agent Box running a small Python agent, Gemini as the model |
+| Agent | A small Python agent (`agent/`), Gemini as the model |
 | Automation | Databricks Jobs for everything scheduled (daily ingest and pipeline, 15-minute ranking/impact refresh). No n8n |
 | Service auth | Auth0 API with client-credentials (M2M) apps and scopes, Auth0 RBAC roles for org admins and moderators |
-| Build tool | Freebuff CLI as the coding agent for everyone |
 | Design | Figma for the Best Design submission |
 
 ### 3.1 Data flow and languages
@@ -313,7 +309,7 @@ Postgres is the only thing the app touches, and the only place input lands. Data
 | 311 fetch (initial load and daily) | **Python** | `psycopg` `COPY` into `raw_311_requests` (section 5.3) |
 | Databricks pipeline | **Python** (bronze, silver) + **SQL** (gold) | Already built in `databricks/`; bronze switches to reading Postgres (section 5.4) |
 | Postgres tables | **SQL** | Migrations in `app/db/migrations/` |
-| Maritime agent | **Python** | |
+| Block Steward agent | **Python** | |
 
 Three languages, and SQL is shared by everyone. Don't add a fourth.
 
@@ -358,7 +354,7 @@ This is the prize we want most, so it gets the most care and the most visible de
 
 - Databricks 14-day trial with **express setup**, signed up with a UBC email. Start it now; the event is inside the 14 days.
 - One person owns the workspace and adds the others as users.
-- First thing: run a network test notebook (`requests.get` against `opendata.vancouver.ca`). The trial limits external network access. (Done 2026-11-07: it works, so the fetch runs as a Databricks job task. If it ever fails, the same fetch script runs in the Maritime agent box, since it only needs to reach the City API and Postgres.) The AI step no longer needs outbound access because it uses Databricks-hosted models.
+- First thing: run a network test notebook (`requests.get` against `opendata.vancouver.ca`). The trial limits external network access. (Done 2026-11-07: it works, so the fetch runs as a Databricks job task. If it ever fails, the same fetch script can run anywhere that reaches the City API and Postgres.) The AI step no longer needs outbound access because it uses Databricks-hosted models.
 - Create a secret scope `bbb` for anything sensitive.
 - Create one service principal (or a personal access token for the weekend) that the agent uses to call the SQL and Jobs APIs. Store it as a secret in each of those, never in the repo. The app doesn't need it: it only talks to Postgres.
 - Connect **our existing Postgres**: database `hackcamp` on `db-hackcamp.noodlelab.ca:5433`, user `hackcamp`. The connection details live in the repo-root `env` file (gitignored; `env.example` is the committed template with the connection steps). It must be reachable from Databricks serverless over the internet. If it has an IP allowlist, allow Databricks' outbound IPs.
@@ -462,7 +458,7 @@ dbutils.jobs.taskValues.set("landed", len(records))
 
 For the first load, `scripts/load_311_to_postgres.py` reads the full parquet export with pyarrow and `COPY`s it into the same table (same columns, `geom` dropped). The current newest `last_modified_timestamp` in the export is `2026-11-07 04:56:25` UTC, so the first daily fetch only picks up changes after that.
 
-**Fallback if Databricks can't reach the City API:** run the same script in the Maritime agent box on a schedule. It only needs the City API and the Postgres connection string. Everything downstream stays the same.
+**Fallback if Databricks can't reach the City API:** run the same script on a schedule from any machine that can reach both. It only needs the City API and the Postgres connection string. Everything downstream stays the same.
 
 ### 5.4 Pipeline: bronze, silver, gold
 
@@ -833,9 +829,9 @@ What to say in the submission: one login with roles (only a verified org admin c
 
 ---
 
-## 8. Maritime: the Block Steward agent
+## 8. The Block Steward agent
 
-One Maritime **Agent Box** (persistent, sleeps when idle, wakes in about a second). Maritime's pitch is one agent per customer; ours is one steward per neighbourhood. For the demo, run one box and show it handling two areas.
+One small Python agent; the idea is one steward per neighbourhood. For the demo, show it handling two areas.
 
 What it does:
 
@@ -843,26 +839,17 @@ What it does:
 2. **Weekly briefing**: on a schedule, reads `gold.area_summaries`, upcoming events and the top Track 2 issues, writes a friendly "ways to help this week" post, and publishes it to the area page through `/api/agent/briefing` (saved in the `posts` table).
 3. **Fallback fetcher**: if Databricks can't reach the City API, it runs the 311 fetch and writes straight into Postgres.
 
-Stack inside the box: Python, `requests`, the Gemini SDK, a small loop on a schedule. It gets an Auth0 token with client credentials and a Databricks token from its own secrets.
+Stack: Python, `requests`, the Gemini SDK, a small loop on a schedule. It gets an Auth0 token with client credentials and a Databricks token from its own secrets.
 
 Human in the loop: the agent suggests, people decide. It never publishes an event, contacts an org outside the app, or sends anything to the City or Council.
 
 Stretch (only if everything else is done): the agent drafts the "Send this list to Council" email from `gold.issue_priority` in plain language, for the resident to edit and send themselves.
 
-Record a 30-second clip of the agent waking, finding a hotspot with nothing planned, and posting a suggestion that an org admin accepts. Maritime requires a short demo in the submission.
-
 ---
 
-## 9. Freebuff
+## 9. Scheduling
 
 We don't use n8n. Scheduled work runs as Databricks jobs: the daily `bbb_daily` job and the 15-minute `bbb_refresh_rankings` job, which picks up completed events from Postgres. For an immediate refresh during the demo, run `databricks bundle run bbb_refresh_rankings`. If we add a hotspot alert for orgs later, it's a task in a Databricks job, not a separate tool.
-
-**Freebuff** (the judges want to hear how it helped):
-
-- Everyone installs it at the start: `npm install -g freebuff`
-- Use it for scaffolding (pages and API routes, the agent loop) and for debugging
-- One person keeps `FREEBUFF_LOG.md`: what we asked it, what it produced, time it saved, a couple of screenshots
-- Mention it in the video and the Devpost write-up
 
 ---
 
@@ -879,7 +866,7 @@ block-by-block/
 │   ├── notebooks/fetch_311.py   # City API → Postgres raw_311_requests
 │   └── notebooks/publish_gold.py # bbb.gold → Postgres gold_* tables
 ├── app/                       # Next.js app (Vercel), db/migrations/ for Postgres tables
-├── agent/                     # Maritime Block Steward
+├── agent/                     # Block Steward agent
 ├── scripts/
 │   ├── pull_311_sample.py     # pulls schema, sample and profile (--full for the parquet)
 │   ├── load_311_to_postgres.py # one-time COPY of the full parquet into raw_311_requests
@@ -890,7 +877,6 @@ block-by-block/
 │   └── raw/                   # gitignored: full parquet export
 ├── docs/
 │   ├── data-shape.md          # field-by-field notes from the data pull
-│   ├── FREEBUFF_LOG.md
 │   ├── impact-statement.md
 │   └── accessibility.md
 └── README.md
@@ -904,10 +890,8 @@ block-by-block/
 |---|---|---|
 | P1 | Databricks: ingestion, pipeline, AI Functions, job, dashboard, Genie | Databricks |
 | P2 | Next.js app: map, volunteer cards and area page, create event, vote page, event chat, Postgres tables, Vercel deploy | Best Design |
-| P3 | Maritime agent and Auth0 | Maritime, Auth0, Gemini |
-| P4 | Figma, impact statement, Freebuff log, video and pitch | Freebuff, Community Impact, Best Design |
-
-Everyone uses Freebuff.
+| P3 | Block Steward agent and Auth0 | Auth0, Gemini |
+| P4 | Figma, impact statement, video and pitch | Community Impact, Best Design |
 
 ---
 
@@ -917,9 +901,8 @@ Everyone uses Freebuff.
 - Databricks trial live, network test run (done), 311 parquet loaded into Postgres (`scripts/pull_311_sample.py --full`, then `scripts/load_311_to_postgres.py`)
 - Next.js app scaffolded and deployed once to Vercel (empty) so deploys are proven
 - Our Postgres reachable from Databricks, roles created, foreign catalog `bbb_app` registered; `DATABASE_URL` in Vercel env vars and `pg_url` in the `bbb` secret scope
-- Maritime box created, Auth0 tenant, web app, API and M2M apps created
-- Freebuff installed on every laptop
-- Opt into prizes on Devpost: Databricks, Freebuff, Auth0, Maritime, Gemini, Community Impact, Best Design
+- Auth0 tenant, web app, API and M2M apps created
+- Opt into prizes on Devpost: Databricks, Auth0, Gemini, Community Impact, Best Design
 
 **Hours 1 to 6: data and skeleton**
 - P1: bronze, silver, `type_categories` with tracks, `hotspots_h3`; review the Track 1 list by hand and fill `track_overrides`
@@ -946,8 +929,8 @@ Everyone uses Freebuff.
 
 **Hours 20 to 24: ship**
 - Feature freeze at hour 20
-- Record the demo video (under 4 minutes) and the 30-second Maritime clip
-- Write the Devpost entry: problem statement, impact statement, how Freebuff helped, how each sponsor tool is used
+- Record the demo video (under 4 minutes)
+- Write the Devpost entry: problem statement, impact statement, how each sponsor tool is used
 - Final deploy, warm the SQL warehouse, rehearse
 
 **Cut order if behind:** ElevenLabs, moderation screens (approve by hand), event chat, weekly briefing (keep the AI summary as a static card), agent suggestions (keep Start an event from a hotspot). Never cut: map, volunteer cards, start an event from a hotspot, RSVP, vote page.
@@ -971,7 +954,7 @@ Follows the pitch in section 0 and the four demo flows in the UI flow.
 
 | Risk | Mitigation |
 |---|---|
-| Trial blocks Databricks from reaching the City API | Tested and it works. If it changes, the Maritime box runs the same fetch and writes to Postgres |
+| Trial blocks Databricks from reaching the City API | Tested and it works. If it changes, run the same fetch from any machine that reaches the City API and Postgres |
 | Pipeline can't read the `bbb_app` Postgres catalog | A SQL task copies `raw_311_requests` into a Delta table before the pipeline runs (section 5.4) |
 | No pay-per-token model endpoint in the trial | Fall back to Gemini called from the agent for summaries and classification, results written back to Databricks |
 | Too many sponsor integrations for 24 hours | Each person carries a clear set; strict cut order |

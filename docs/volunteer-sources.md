@@ -30,7 +30,21 @@ The official Lower Mainland Green Team page is also validated on every refresh. 
 
 ### Lower Mainland Green Team Meetup
 
-The reusable parser can read public schema.org event JSON-LD without calling Meetup's private `/api`, `/gql`, RSS, Atom, or internal Next.js endpoints. Meetup's current public group page no longer exposes stable event metadata, so it is not an active ingestion source; the official Green Teams Canada signup opportunity remains available instead.
+An optional collector discovers links on the public group page and reads event JSON-LD from individual public event pages. It collects dates, venue, signup URL and source coordinates when present. It does not use private APIs, feeds or authenticated pages. Public markup may change or be blocked; a failed or unrecognized page fails the source without withdrawing existing events. The group page is not treated as a complete snapshot, so missing events are not withdrawn; the app excludes events after their end date. The general signup opportunity remains separate.
+
+Meetup's terms restrict certain automated extraction, including for commercial purposes; review the current terms and obtain any required permission before enabling this collector. The collector is disabled by default. In the root `.env`, set `ENABLE_MEETUP_COLLECTOR=true` to include it in the normal volunteer ingest after that review. Source access from the machine running the job is required.
+
+To add map pins for eligible events from **any** source, apply the migrations and then run:
+
+```sh
+npm --prefix app run db:migrate
+npm --prefix app run ingest:volunteer-events
+npm --prefix app run geocode:events
+```
+
+The geocoding pass uses the BC address geocoder, caches successful matches in `event_geocodes`, and only accepts a high-scoring civic address or unit in the stated municipality within the Lower Mainland bounds. Locations without a street number and municipality, regional descriptions, and ambiguous or low-confidence matches stay unpinned. Source coordinates take priority. Cached results include the matched address, score and precision. If a source changes its location text, the ingest clears old inferred coordinates. A provider outage stops the geocoding command without changing unmatched events; rerun it after service returns.
+
+Schedule the two ingest commands in order on a machine with Node, network access, the repository, and `DATABASE_URL` or the documented PostgreSQL credentials. For example, a daily cron job can run `npm --prefix /path/to/HackCamp-2026/app run ingest:volunteer-events && npm --prefix /path/to/HackCamp-2026/app run geocode:events`; send its nonzero exit status to your job monitoring. Databricks can read collected event records through `bbb_app.public.raw_volunteer_events`. The collector has not been verified against the live Meetup page from this environment; check the first run's logs and resulting event records before relying on it.
 
 ### Other validated Vancouver opportunities
 

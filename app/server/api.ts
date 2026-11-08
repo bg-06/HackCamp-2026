@@ -514,8 +514,8 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
   app.post('/agent/suggestions', async (req, res) => {
     requireScope(req, 'suggestions:post')
     const s = parseSuggestion(req.body)
-    // Normalize legacy agent hotspot IDs before lookup.
-    const hotspotId = s.hotspotId.replace(':', '|')
+    // Legacy agent IDs are normalized by parseSuggestion.
+    const hotspotId = s.hotspotId
     const result = await sql.begin(async tx => {
       if (s.orgIds.length) {
         const known = await tx<{ id: string }[]>`SELECT id FROM orgs WHERE id IN ${tx(s.orgIds)}`

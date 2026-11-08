@@ -296,6 +296,7 @@ test('agent suggestions need the suggestions scope and are stored pending, once 
   const rows = await sql`SELECT org_id, status, author, hotspot_id, payload FROM posts ORDER BY org_id`
   assert.deepEqual(rows.map(r => [r.org_id, r.status, r.author]), [['org-a', 'pending', 'block-steward-agent'], ['org-b', 'pending', 'block-steward-agent']])
   assert.equal(rows[0]!.hotspot_id, hotspotId) // normalised to the app's "<h3>|<type>"
+  assert.equal(rows[0]!.payload.event_draft.hotspot_id, hotspotId)
   assert.equal(rows[0]!.payload.event_draft.what_to_bring, 'Gloves')
 
   // a retry the same week, and next week's suggestion for the same hotspot, are both skipped with 200
