@@ -32,6 +32,8 @@ type EventRow = {
   spots_total: number | null; what_to_bring: string | null; signup_url: string | null
   is_sample: boolean; latitude: number | null; longitude: number | null; h3_r9: string | null
   created_at: Date; source_withdrawn_at: Date | null; spots_taken: number; going: boolean
+  has_image: boolean; comment_count: number
+  hotspot_id: string | null
   hs_request_type: string | null; hs_times_reported: number | null; hs_months_seen: number | null
 }
 
@@ -40,13 +42,17 @@ function eventQuery(user: string, where: ReturnType<typeof sql>) {
   return sql<EventRow[]>`
     SELECT e.id, e.kind, e.title, e.organiser, e.category, e.starts_at, e.ends_at, e.location,
            e.local_area, e.spots_total, e.what_to_bring, e.signup_url, e.is_sample,
-           e.latitude, e.longitude, e.h3_r9, e.created_at, e.source_withdrawn_at,
-           count(r.user_id) FILTER (WHERE r.user_id <> ${user})::int AS spots_taken,
+           e.latitude, e.longitude, e.h3_r9, e.created_at, e.source_withdrawn_at, e.hotspot_id,
+           count(DISTINCT r.user_id) FILTER (WHERE r.user_id <> ${user})::int AS spots_taken,
            coalesce(bool_or(r.user_id = ${user}), false) AS going,
+           coalesce(bool_or(i.event_id IS NOT NULL), false) AS has_image,
+           count(DISTINCT c.id) FILTER (WHERE NOT c.hidden)::int AS comment_count,
            h.request_type AS hs_request_type, h.times_reported::int AS hs_times_reported,
            h.months_seen::int AS hs_months_seen
     FROM events e
     LEFT JOIN rsvps r ON r.event_id = e.id
+    LEFT JOIN event_images i ON i.event_id = e.id
+    LEFT JOIN comments c ON c.event_id = e.id
     -- hotspot_id is "<h3_r9>|<request_type>" for events started from a help hotspot
     LEFT JOIN gold_help_hotspots h ON e.hotspot_id = h.h3_r9 || '|' || h.request_type
     WHERE ${where}
@@ -70,6 +76,7 @@ function toEvent(r: EventRow) {
     ...(inApp ? { spotsTotal: r.spots_total!, spotsTaken: r.spots_taken } : {}),
     ...(r.what_to_bring ? { whatToBring: r.what_to_bring } : {}),
     ...(r.signup_url ? { signupUrl: r.signup_url } : {}),
+    ...(r.has_image ? { photoUrl: `/events/${encodeURIComponent(r.id)}/image` } : {}),
     ...(r.hs_request_type
       ? { hotspot: { requestType: r.hs_request_type, timesReported: r.hs_times_reported ?? 0, monthsSeen: r.hs_months_seen ?? 0 } }
       : {}),
@@ -77,6 +84,8 @@ function toEvent(r: EventRow) {
     ...place,
     createdAt: iso(r.created_at),
     going: r.going,
+    commentCount: r.comment_count,
+    ...(r.hotspot_id ? { hotspotId: r.hotspot_id } : {}),
     withdrawn: r.source_withdrawn_at !== null,
   }
 }
@@ -86,7 +95,7 @@ function toEvent(r: EventRow) {
 type IssueRow = {
   issue_id: string; h3_r9: string; request_type: string; category: string | null; local_area: string | null
   address: string | null; open_cases: number; days_open: number; times_reported_12m: number; base_score: number
-  up_votes: number; down_votes: number; my_vote: number
+  up_votes: number; down_votes: number; my_vote: number; comment_count: number
 }
 
 // up_votes / down_votes leave out the caller's own vote; that is my_vote (see types.ts).
@@ -96,9 +105,11 @@ function issueQuery(user: string, where: ReturnType<typeof sql>, limit: number) 
            i.open_cases::int, i.days_open::int, i.times_reported_12m::int, i.base_score::float8 AS base_score,
            count(*) FILTER (WHERE v.value = 1 AND v.user_id IS DISTINCT FROM ${user})::int AS up_votes,
            count(*) FILTER (WHERE v.value = -1 AND v.user_id IS DISTINCT FROM ${user})::int AS down_votes,
-           coalesce(max(v.value) FILTER (WHERE v.user_id = ${user}), 0)::int AS my_vote
+           coalesce(max(v.value) FILTER (WHERE v.user_id = ${user}), 0)::int AS my_vote,
+           count(DISTINCT c.id) FILTER (WHERE NOT c.hidden)::int AS comment_count
     FROM gold_track2_issues i
     LEFT JOIN votes v ON v.issue_id = i.issue_id
+    LEFT JOIN comments c ON c.issue_id = i.issue_id
     WHERE ${where}
     GROUP BY i.issue_id
     ORDER BY i.base_score DESC NULLS LAST
@@ -120,6 +131,7 @@ function toIssue(r: IssueRow) {
     up_votes: r.up_votes,
     down_votes: r.down_votes,
     my_vote: r.my_vote,
+    comment_count: r.comment_count,
     ...centre(r.h3_r9),
   }
 }
@@ -161,6 +173,27 @@ app.get('/events', async (req, res) => {
   res.json(rows.map(toEvent))
 })
 
+type EventImageRow = { data: Buffer; mime_type: string; byte_length: number; etag: string }
+
+app.get('/events/:id/image', async (req, res) => {
+  const [image] = await sql<EventImageRow[]>`
+    SELECT data, mime_type, byte_length,
+           '"' || encode(sha256(data), 'hex') || '"' AS etag
+    FROM event_images
+    WHERE event_id = ${req.params.id}`
+  if (!image) return void res.status(404).json({ error: 'event image not found' })
+
+  res.set({
+    'Content-Type': image.mime_type,
+    'Content-Length': String(image.byte_length),
+    'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
+    ETag: image.etag,
+    'X-Content-Type-Options': 'nosniff',
+  })
+  if (req.fresh) return void res.status(304).end()
+  res.end(image.data)
+})
+
 app.get('/events/:id', async (req, res) => {
   const [row] = await eventQuery(userId(req), sql`
     e.id = ${req.params.id} AND (
@@ -170,6 +203,94 @@ app.get('/events/:id', async (req, res) => {
   `)
   if (!row) return void res.status(404).json({ error: 'event not found' })
   res.json(toEvent(row))
+})
+
+app.post('/events', async (req, res) => {
+  const body = req.body as Record<string, unknown>
+  const text = (key: string, max: number, optional = false) => {
+    const value = body[key]
+    if (optional && (value === undefined || value === null || value === '')) return null
+    return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= max ? value.trim() : undefined
+  }
+  const title = text('title', 200)
+  const location = text('location', 300)
+  const localArea = text('localArea', 100)
+  const category = text('category', 100)
+  const whatToBring = text('whatToBring', 500, true) ?? null
+  const startsAt = typeof body.startsAt === 'string' ? new Date(body.startsAt) : null
+  const endsAt = typeof body.endsAt === 'string' ? new Date(body.endsAt) : null
+  const spotsTotal = Number(body.spotsTotal)
+  const lat = body.lat === undefined ? null : Number(body.lat)
+  const lng = body.lng === undefined ? null : Number(body.lng)
+  const hotspotId = text('hotspotId', 300, true) ?? null
+  if (!title || !location || !localArea || !category || !startsAt || !endsAt || Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
+    return void res.status(400).json({ error: 'title, location, localArea, category, startsAt and endsAt are required' })
+  }
+  if (endsAt <= startsAt || !Number.isInteger(spotsTotal) || spotsTotal < 1 || spotsTotal > 10000) {
+    return void res.status(400).json({ error: 'endsAt must follow startsAt and spotsTotal must be 1-10000' })
+  }
+  if ((lat !== null && (!Number.isFinite(lat) || lat < -90 || lat > 90)) || (lng !== null && (!Number.isFinite(lng) || lng < -180 || lng > 180))) {
+    return void res.status(400).json({ error: 'invalid coordinates' })
+  }
+  const user = userId(req)
+  const [created] = await sql<{ id: string }[]>`
+    INSERT INTO events (
+      kind, title, organiser, category, starts_at, ends_at, location, local_area,
+      latitude, longitude, spots_total, what_to_bring, hotspot_id, created_by, is_sample
+    ) VALUES (
+      'hotspot', ${title}, ${user}, ${category}, ${startsAt}, ${endsAt}, ${location}, ${localArea},
+      ${lat}, ${lng}, ${spotsTotal}, ${whatToBring}, ${hotspotId}, ${user}, false
+    ) RETURNING id`
+  await sql`INSERT INTO rsvps (event_id, user_id) VALUES (${created!.id}, ${user}) ON CONFLICT DO NOTHING`
+  const [row] = await eventQuery(user, sql`e.id = ${created!.id}`)
+  res.status(201).json(toEvent(row!))
+})
+
+type HotspotRow = {
+  h3_r9: string; request_type: string; category: string | null; local_area: string | null
+  times_reported: number; months_seen: number; last_reported: Date
+}
+
+app.get('/hotspots', async (_req, res) => {
+  const rows = await sql<HotspotRow[]>`
+    SELECT h3_r9, request_type, category, local_area, times_reported::int, months_seen::int,
+           last_reported
+    FROM gold_help_hotspots
+    ORDER BY times_reported DESC, last_reported DESC
+    LIMIT 500`
+  res.json(rows.map((row) => ({
+    id: `${row.h3_r9}|${row.request_type}`,
+    h3_r9: row.h3_r9,
+    request_type: row.request_type,
+    category: row.category ?? 'Other',
+    local_area: row.local_area ?? 'Vancouver',
+    times_reported: row.times_reported,
+    months_seen: row.months_seen,
+    last_reported: row.last_reported.toISOString(),
+    ...centre(row.h3_r9),
+  })))
+})
+
+app.get('/me/history', async (req, res) => {
+  const rows = await sql<{
+    id: string; title: string | null; organiser: string | null; starts_at: Date | null
+    ends_at: Date | null; done_at: Date | null; people_count: number | null; is_sample: boolean
+  }[]>`
+    SELECT e.id, e.title, e.organiser, e.starts_at, e.ends_at, e.done_at, e.people_count, e.is_sample
+    FROM rsvps r JOIN events e ON e.id = r.event_id
+    WHERE r.user_id = ${userId(req)} AND e.done_at IS NOT NULL
+    ORDER BY e.done_at DESC`
+  res.json(rows.map((row) => {
+    const duration = row.starts_at && row.ends_at ? Math.max((row.ends_at.getTime() - row.starts_at.getTime()) / 3_600_000, 0) : 0
+    return {
+      id: row.id,
+      title: row.title ?? 'Volunteer activity',
+      organiser: row.organiser ?? 'Unknown organiser',
+      date: (row.done_at ?? row.starts_at ?? new Date(0)).toISOString(),
+      hours: duration,
+      sample: row.is_sample,
+    }
+  }))
 })
 
 // ?area=<local area> narrows the list; ?limit= caps it (default and max 5000).

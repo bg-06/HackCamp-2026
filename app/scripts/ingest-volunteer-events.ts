@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { config } from 'dotenv'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { downloadVolunteerImage, type DownloadedImage } from '../lib/volunteer-sources/image-download.js'
 import { volunteerSources, type VolunteerListing } from '../lib/volunteer-sources/index.js'
 import { GreenTeamsActivitiesAdapter, type RawVolunteerRecord } from '../lib/volunteer-sources/green-teams.js'
 
@@ -63,7 +64,24 @@ async function ensureAppSchema(): Promise<void> {
 
 type QueryTag = (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown>
 
-async function upsert(tx: QueryTag, listing: VolunteerListing): Promise<string> {
+async function upsertImage(tx: QueryTag, eventId: string, listing: VolunteerListing, image: DownloadedImage): Promise<void> {
+  await tx`
+    INSERT INTO event_images (event_id, data, mime_type, source_url, attribution, license)
+    VALUES (
+      ${eventId}, ${Buffer.from(image.data)}, ${image.mimeType}, ${listing.imageSourceUrl},
+      ${listing.imageAttribution ?? null}, ${listing.imageLicense ?? null}
+    )
+    ON CONFLICT (event_id) DO UPDATE SET
+      data = EXCLUDED.data,
+      mime_type = EXCLUDED.mime_type,
+      source_url = EXCLUDED.source_url,
+      attribution = EXCLUDED.attribution,
+      license = EXCLUDED.license,
+      updated_at = now()
+  `
+}
+
+async function upsert(tx: QueryTag, listing: VolunteerListing, image?: DownloadedImage): Promise<string> {
   const id = listingId(listing)
   await tx`
     INSERT INTO events (
@@ -93,6 +111,7 @@ async function upsert(tx: QueryTag, listing: VolunteerListing): Promise<string> 
       created_by = EXCLUDED.created_by,
       source_withdrawn_at = NULL
   `
+  if (image) await upsertImage(tx, id, listing, image)
   return id
 }
 
@@ -120,7 +139,18 @@ try {
       if (!snapshot.validated) throw new Error(`${source.id}: source snapshot was not validated`)
       await sql.begin(async (tx) => {
         const ids: string[] = []
-        for (const listing of snapshot.listings) ids.push(await upsert(tx as unknown as QueryTag, listing))
+        for (const listing of snapshot.listings) {
+          let image: DownloadedImage | undefined
+          if (listing.imageSourceUrl) {
+            try {
+              image = await downloadVolunteerImage(listing.imageSourceUrl)
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error)
+              console.error(`${source.id}:${listing.sourceKey}: image fetch failed: ${message}`)
+            }
+          }
+          ids.push(await upsert(tx as unknown as QueryTag, listing, image))
+        }
         const owner = `source:${source.id}`
         const activeMissing = sql`
           created_by = ${owner}

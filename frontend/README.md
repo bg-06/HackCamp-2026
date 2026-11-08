@@ -78,15 +78,16 @@ Everything shown is sample data for now, and sample listings say so.
 
 All data goes through `src/api/client.ts`. Pages never fetch on their own.
 
-1. Fill in the parts marked `TODO(backend)` in `src/api/client.ts`.
-2. Keep returning the shapes in `src/types.ts`. If your fields are named differently, convert them inside `client.ts`.
-3. Copy `.env.example` to `.env` and set `VITE_USE_MOCK=false`.
-4. In dev, `/api/*` is forwarded to `http://localhost:8000` (change it in `vite.config.ts`).
+1. Configure the root `.env` with the Postgres connection settings.
+2. From `app/`, run `npm run db:migrate`, then `npm run ingest:volunteer-events`, then `npm run api`.
+3. In another terminal, run `npm run dev:api` from `frontend/`.
+4. In dev, `/api/*` is forwarded to `http://localhost:8000`. Set `VITE_API_BASE` for a deployed API.
 
 | Function | Request | Returns |
 |---|---|---|
 | `getVolunteerEvents()` | `GET /events` | `VolunteerEvent[]` |
 | `getVolunteerEvent(id)` | `GET /events/:id` | `VolunteerEvent`, or `null` on 404 |
+| event image | `GET /events/:id/image` | Postgres-backed JPEG, PNG, WebP or GIF |
 | `setGoing(id, on)` | `POST` / `DELETE /events/:id/rsvp` | nothing |
 | `getHelpHotspots()` | `GET /hotspots` | `HelpHotspot[]` (gold_help_hotspots + cell centre) |
 | `createEvent(input)` | `POST /events` with `NewEvent` | `VolunteerEvent` (host = the signed-in user) |
@@ -97,7 +98,7 @@ All data goes through `src/api/client.ts`. Pages never fetch on their own.
 | `getComments(type, id)` | `GET /events/:id/comments` or `/issues/:id/comments` | `Comment[]`, oldest first |
 | `addComment(type, id, body)` | `POST` the same path with `{ body }` | `Comment` |
 
-`GET /events` should also send `commentCount` and `hotspotId`, and `GET /issues` a `comment_count`.
+`GET /events` includes `commentCount`, `hotspotId`, and `photoUrl` when an image exists. `GET /issues` includes `comment_count`.
 
 Signing up, voting, commenting and starting an event need sign-in. The author of a comment must come from the session on the
 server, never from the request body. Comments are plain text; the page never renders HTML from them.

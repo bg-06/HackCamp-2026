@@ -10,6 +10,7 @@ type JsonLdEvent = {
   location?: string | { name?: string; address?: string | { streetAddress?: string; addressLocality?: string } }
   organizer?: { name?: string }
   maximumAttendeeCapacity?: number
+  image?: string | string[] | { url?: string; contentUrl?: string } | Array<{ url?: string; contentUrl?: string }>
 }
 
 function flattenJsonLd(value: unknown): JsonLdEvent[] {
@@ -27,6 +28,18 @@ function locationText(location: JsonLdEvent['location']): string | null {
     ? location.address
     : [location.address?.streetAddress, location.address?.addressLocality].filter(Boolean).join(', ')
   return [location.name, address].filter(Boolean).join(' · ') || null
+}
+
+function imageUrl(image: JsonLdEvent['image']): string | undefined {
+  const candidates = Array.isArray(image) ? image : [image]
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate) return candidate
+    if (candidate && typeof candidate === 'object') {
+      if (candidate.contentUrl) return candidate.contentUrl
+      if (candidate.url) return candidate.url
+    }
+  }
+  return undefined
 }
 
 function eventKey(url: string): string {
@@ -76,6 +89,9 @@ export function parseMeetupListings(html: string, sourceId: string, fallbackOrga
       spotsTotal: event.maximumAttendeeCapacity ?? null,
       whatToBring: null,
       signupUrl: event.url,
+      imageSourceUrl: imageUrl(event.image),
+      imageAttribution: event.organizer?.name ?? fallbackOrganiser,
+      imageLicense: null,
     }]
   })
   return { listings, validated: true }

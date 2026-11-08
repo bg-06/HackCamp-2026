@@ -14,6 +14,9 @@ export type VolunteerListing = {
   spotsTotal: number | null
   whatToBring: string | null
   signupUrl: string
+  imageSourceUrl?: string
+  imageAttribution?: string | null
+  imageLicense?: string | null
 }
 
 export type VolunteerSnapshot = {
