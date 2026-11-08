@@ -25,6 +25,15 @@ CREATE TABLE IF NOT EXISTS bbb.gold.track_overrides (
   note STRING
 ) COMMENT 'Manual corrections to the AI track for a 311 request type';
 
+-- Frozen AI category and track per request type (seeded by type_labels_seed.sql, new types added
+-- by the freeze_type_labels job task). Read by bbb.gold.type_categories.
+CREATE TABLE IF NOT EXISTS bbb.gold.type_labels (
+  request_type STRING NOT NULL,
+  category STRING,
+  ai_track STRING,
+  labelled_at TIMESTAMP
+) COMMENT 'Stored AI labels per 311 request type, so labels stay the same between pipeline runs';
+
 -- Seed overrides: Track 1 picks from ai_classify (checked 2026-11-07) that volunteers shouldn't do.
 -- MERGE so re-running setup updates these rows and leaves any rows added by hand alone.
 MERGE INTO bbb.gold.track_overrides t

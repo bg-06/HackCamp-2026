@@ -5,7 +5,8 @@ workspace:
   host: https://dbc-7f6625ff-1e9b.cloud.databricks.com
 
 # Before the first deploy: python databricks/setup/setup_postgres.py
-# (secret scope `bbb`, connection `bbb_pg`, foreign catalog `bbb_app`, bbb.gold.track_overrides).
+# (secret scope `bbb`, connection `bbb_pg`, foreign catalog `bbb_app`, bbb.gold.track_overrides,
+# bbb.gold.type_labels and its seed).
 
 variables:
   summary_endpoint:
@@ -42,8 +43,12 @@ resources:
         - task_key: pipeline_refresh
           pipeline_task:
             pipeline_id: ${resources.pipelines.t311_pipeline.id}
-        - task_key: refresh_rankings
+        - task_key: freeze_type_labels
           depends_on: [{ task_key: pipeline_refresh }]
+          notebook_task:
+            notebook_path: ./notebooks/freeze_type_labels.py
+        - task_key: refresh_rankings
+          depends_on: [{ task_key: freeze_type_labels }]
           notebook_task:
             notebook_path: ./notebooks/refresh_rankings.py
         - task_key: area_summaries
