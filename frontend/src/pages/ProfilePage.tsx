@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getMyHistory, USE_MOCK } from "../api/client";
 import { downloadHoursRecord, formatDay, formatHours } from "../lib/hours";
+import { useAuth } from "../state/auth";
 import { useFeed } from "../state/feed";
 import type { VolunteerRecord } from "../types";
 
@@ -10,6 +11,7 @@ const TZ = "America/Vancouver";
 
 export default function ProfilePage() {
   const { events, issues, signedIn, signIn, signOut } = useFeed();
+  const { ready, name, picture, error: authError } = useAuth();
   const [history, setHistory] = useState<VolunteerRecord[] | null>(null);
   const [historyError, setHistoryError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -40,21 +42,33 @@ export default function ProfilePage() {
       <main className="page-content">
         <section className="profile-head">
           <span className="avatar" aria-hidden="true">
-            {signedIn ? "Y" : "?"}
+            {signedIn && picture ? (
+              <img src={picture} alt="" referrerPolicy="no-referrer" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} />
+            ) : signedIn ? (
+              (name ?? "Y").charAt(0).toUpperCase()
+            ) : (
+              "?"
+            )}
           </span>
           <div className="profile-who">
-            <p className="profile-name">{signedIn ? "You" : "Not signed in"}</p>
+            <p className="profile-name">{signedIn ? (name ?? "You") : ready ? "Not signed in" : "Checking sign-in…"}</p>
             <p className="muted small">Vancouver</p>
           </div>
-          <button className={`action-button ${signedIn ? "secondary" : ""} profile-sign`} onClick={signedIn ? signOut : signIn}>
+          <button className={`action-button ${signedIn ? "secondary" : ""} profile-sign`} onClick={signedIn ? signOut : signIn} disabled={!ready}>
             {signedIn ? "Sign out" : "Sign in"}
           </button>
         </section>
+        {authError && (
+          <p className="form-error" role="alert">
+            <TriangleAlert size={16} aria-hidden="true" />
+            {authError}
+          </p>
+        )}
         {USE_MOCK && (
           <p className="muted small">Sample sign-in for now, no real account. Shows sample history plus what you've done on this visit.</p>
         )}
 
-        {!signedIn ? (
+        {!ready ? null : !signedIn ? (
           <p className="muted">Sign in to see what you've signed up for, your votes and your volunteer hours.</p>
         ) : (
           <>

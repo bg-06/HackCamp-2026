@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ApiError, getHelpHotspots, getTrack2Issues, getVolunteerEvents, getVoteBudget, setGoing as saveGoing, setVote } from "../api/client";
+import { ApiError, getHelpHotspots, getTrack2Issues, getVolunteerEvents, getVoteBudget, setGoing as saveGoing, setVote, USE_MOCK } from "../api/client";
+import { useAuth } from "./auth";
 import { inVancouver } from "../lib/geo";
 import { vancouverToday } from "../lib/issues";
 import type { CommentTarget, FeedTab, HelpHotspot, LatLng, SortKey, Track2Issue, VolunteerEvent, Vote, VoteBudget } from "../types";
@@ -48,7 +49,13 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
     scrollTop.current[tab] = top;
   }, []);
 
+  const auth = useAuth();
+  // With Auth0, wait until we know who you are, so the lists come with your votes and RSVPs.
+  // (Signing in or out reloads the page, so this changes only once.) Mock sign-in doesn't refetch.
+  const authKey = USE_MOCK ? "mock" : auth.ready ? String(auth.signedIn) : null;
+
   useEffect(() => {
+    if (authKey === null) return;
     let cancelled = false;
     getVolunteerEvents()
       // Finished dated events drop off; undated programs are ongoing and stay visible.
@@ -60,11 +67,12 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
     getHelpHotspots()
       .then((items) => !cancelled && setHotspots({ items }))
       .catch((e: unknown) => !cancelled && setHotspots({ error: errorText(e) }));
-    refreshBudget();
+    // /me/votes needs an account; signed out there's no budget to show
+    if (authKey !== "false") refreshBudget();
     return () => {
       cancelled = true;
     };
-  }, [reloadKey, refreshBudget]);
+  }, [reloadKey, authKey, refreshBudget]);
 
   // A new Vancouver day brings new votes. Check every minute and whenever the tab comes back.
   const voteDate = voteBudget?.voteDate;
@@ -174,10 +182,9 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  // Sign-in. In mock mode "Sign in" just flips this flag.
-  // TODO(auth): with Auth0, signIn() calls loginWithRedirect and keeps the pending action in appState,
-  // since the page reloads after the redirect.
-  const [signedIn, setSignedIn] = useState(false);
+  // Sign-in. Mock mode signs in straight away and then runs what you tapped. Auth0 goes to its login
+  // page and comes back to this page; the tap isn't replayed, since the page reloads.
+  const { signedIn } = auth;
   const [signInPrompt, setSignInPrompt] = useState<string | null>(null);
   const pending = useRef<(() => void) | null>(null);
 
@@ -189,28 +196,30 @@ export default function FeedProvider({ children }: { children: ReactNode }) {
     },
     [signedIn],
   );
+  const { login, logout } = auth;
   const signIn = useCallback(() => {
-    setSignedIn(true);
     setSignInPrompt(null);
+    login();
+    if (!USE_MOCK) return; // Auth0 leaves the page; the budget loads when it comes back
     refreshBudget();
     const action = pending.current;
     pending.current = null;
     action?.();
-  }, [refreshBudget]);
+  }, [login, refreshBudget]);
   const cancelSignIn = useCallback(() => {
     pending.current = null;
     setSignInPrompt(null);
   }, []);
   // Your votes and sign-ups belong to the account, so they go with it.
-  // TODO(auth): Auth0 logout reloads the page, which does the same.
+  // Auth0 logout reloads the page, which does the same.
   const signOut = useCallback(() => {
-    setSignedIn(false);
+    logout();
     budgetSeq.current++; // drop any budget still on its way for the old account
     setVoteBudget(null);
     setVoteLimitHit(false);
     setIssues((prev) => ({ ...prev, items: prev.items?.map((i) => ({ ...i, my_vote: 0 })) }));
     setEvents((prev) => ({ ...prev, items: prev.items?.map((e) => ({ ...e, going: false })) }));
-  }, []);
+  }, [logout]);
 
   return (
     <FeedContext.Provider

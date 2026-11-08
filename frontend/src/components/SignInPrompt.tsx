@@ -37,7 +37,11 @@ export default function SignInPrompt() {
             Not now
           </button>
         </div>
-        {USE_MOCK && <p className="muted small">Sample sign-in: no account needed yet.</p>}
+        {USE_MOCK ? (
+          <p className="muted small">Sample sign-in: no account needed yet.</p>
+        ) : (
+          <p className="muted small">You'll come back to this page after signing in.</p>
+        )}
       </div>
     </div>
   )

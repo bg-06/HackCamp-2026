@@ -16,12 +16,37 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 // Give up after 15 s so a stuck request shows "Try again" instead of loading forever
 const TIMEOUT_MS = 15000;
 
+// Set by AuthProvider while someone is signed in with Auth0. Returns an access token for our API.
+let getAccessToken: (() => Promise<string | undefined>) | null = null;
+export function setAccessTokenGetter(getter: (() => Promise<string | undefined>) | null) {
+  getAccessToken = getter;
+}
+
+/** Sent on every call while signed in: writes need it, and reads use it for your votes and RSVPs. */
+async function authHeaders(): Promise<Record<string, string>> {
+  if (!getAccessToken) return {};
+  try {
+    const token = await getAccessToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    // Session expired or couldn't renew: send nothing, so public reads still work and writes get a 401.
+    return {};
+  }
+}
+
 // A failed request. `body` is the parsed JSON error, if there was one (the vote limit sends its numbers there).
+// status 401 = sign in again, 403 = not allowed, 503 = try again later.
 export class ApiError extends Error {
   status: number;
   body: unknown;
   constructor(status: number, body?: unknown) {
-    super(`Request failed (${status})`);
+    super(
+      status === 401
+        ? "Please sign in again"
+        : status === 403
+          ? "You don't have permission to do that"
+          : `Request failed (${status})`,
+    );
     this.status = status;
     this.body = body;
   }
@@ -31,8 +56,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     signal: AbortSignal.timeout(TIMEOUT_MS),
     ...init,
-    // merged, so adding an Authorization header later doesn't drop the content type
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: { "Content-Type": "application/json", ...(await authHeaders()), ...init?.headers },
   });
   if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => undefined));
   // A 200/201 with an empty body is still a success (common for PUT and POST)
@@ -158,7 +182,7 @@ export async function getMyHistory(): Promise<VolunteerRecord[]> {
 
 // ---------- Comments (the discussion under each post) ----------
 
-// Shown as the author in mock mode, until Auth0 sign-in gives us the real name.
+// Shown as the author in mock mode. With Auth0 the backend sets the author from the token.
 const MOCK_ME = { author: "You", authorKind: "resident" as const };
 
 const commentsPath = (type: CommentTarget, id: string) =>

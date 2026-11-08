@@ -84,6 +84,34 @@ Use the same audience as `AUTH0_AUDIENCE`. Do not send `X-Demo-User`.
 On 401, renew the access token or require login. On 403, show permission denied. On
 503, preserve the UI state and allow retry. Never put bearer tokens in URLs or logs.
 
+## Frontend sign-in (local testing)
+
+The React app signs in with `@auth0/auth0-react` when `VITE_USE_MOCK=false`. Put the public
+SPA values in `frontend/.env` (see `frontend/.env.example`):
+
+```dotenv
+VITE_USE_MOCK=false
+VITE_AUTH0_DOMAIN=<tenant>.us.auth0.com
+VITE_AUTH0_CLIENT_ID=<blockbyblock-web client ID>
+VITE_AUTH0_AUDIENCE=https://api.blockbyblock
+```
+
+Run the API (`npm --prefix app run api`, port 8000) and the frontend (`npm --prefix frontend run dev`,
+port 5173, the URL registered in Auth0). Open Profile → Sign in. After login, every API call carries
+`Authorization: Bearer <access token>`; check it in DevTools → Network on any `/api/...` request.
+Signed-in reads return your `my_vote`/`going`; votes, RSVPs, comments and new events use your `sub`.
+
+To call the API by hand, copy the token from that request header in your own terminal (never commit
+or paste it into chat/issues):
+
+```bash
+TOKEN='<paste access token>'
+curl -i -H "Authorization: Bearer $TOKEN" http://localhost:8000/me/votes
+```
+
+200 = valid resident token, 401 = missing/expired/wrong audience, 403 = machine token (for example the
+token on the API's **Test** tab in the Auth0 dashboard). Tokens expire after the API's lifetime setting.
+
 ## Verification
 
 `npm --prefix app test` generates RSA keys locally and tests actual signature/claim
