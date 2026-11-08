@@ -20,6 +20,10 @@
   --text-muted: #a5a5ad;
   --warning: #f0a35e;
 
+  /* Cards need no lift in dark mode: #1c1c20 already sits clearly off #111114.
+     Light mode turns this on, because there surface and page are both white. */
+  --card-shadow: none;
+
   --track1: var(--blue);
   --track1-light: var(--blue-light);
   --track2: var(--blue);
@@ -36,20 +40,22 @@
 
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
-    --bg: #f4f5f7; --surface: #ffffff; --surface-muted: #e9eaee;
-    --chrome: #ffffff; --field: #f0f1f4;
+    --bg: #eef2f6; --surface: #ffffff; --surface-muted: #e3e9ef;
+    --chrome: #ffffff; --field: #e3e9ef;
     --border: #777f88; --text: #111214; --text-muted: #595f69;
     --blue: #2563eb; --blue-dark: #1d4ed8; --blue-light: #e8f0fe;
     --warning: #a8500f;
+    --card-shadow: 0 1px 2px rgb(17 18 20 / 7%), 0 2px 8px rgb(17 18 20 / 4%);
     color-scheme: light;
   }
 }
 :root[data-theme="light"] {
-  --bg: #f4f5f7; --surface: #ffffff; --surface-muted: #e9eaee;
-  --chrome: #ffffff; --field: #f0f1f4;
+  --bg: #eef2f6; --surface: #ffffff; --surface-muted: #e3e9ef;
+  --chrome: #ffffff; --field: #e3e9ef;
   --border: #777f88; --text: #111214; --text-muted: #595f69;
   --blue: #2563eb; --blue-dark: #1d4ed8; --blue-light: #e8f0fe;
   --warning: #a8500f;
+  --card-shadow: 0 1px 2px rgb(17 18 20 / 7%), 0 2px 8px rgb(17 18 20 / 4%);
   color-scheme: light;
 }
 :root[data-theme="dark"] { color-scheme: dark; }
@@ -360,6 +366,7 @@ button {
   border: none;
   border-radius: 0;
   background: var(--surface);
+  box-shadow: var(--card-shadow);
 }
 .tile-link {
   display: block;
@@ -420,6 +427,7 @@ a.tile:hover h3,
   border: none;
   border-radius: 0;
   background: var(--surface);
+  box-shadow: var(--card-shadow);
 }
 .issue-row-main {
   flex: 1;
@@ -795,6 +803,7 @@ a.tile:hover h3,
 }
 .tile.skeleton {
   border-color: transparent;
+  box-shadow: none;
 }
 @keyframes pulse {
   from {
@@ -865,6 +874,8 @@ a.tile:hover h3,
   margin: 16px 0 0;
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--card-shadow);
 }
 /* Number on top, label under it */
 .stats > div {
@@ -1062,6 +1073,7 @@ a.tile:hover h3,
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
+  box-shadow: var(--card-shadow);
   scroll-snap-align: start;
 }
 .help-card-link {
