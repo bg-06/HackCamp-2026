@@ -1031,11 +1031,9 @@ a.tile:hover h3,
   font-size: 0.8125rem;
 }
 .needs-help {
-  /* Full-bleed band so the rail reads as a distinct, swipeable module in the feed.
-     The first card still lines up with the post columns (12px page padding). */
+  /* Full-bleed rail, but the first card still lines up with the post columns (12px page padding). */
   margin: 4px -12px 18px;
   padding: 12px 0 16px;
-  background: var(--surface-muted);
 }
 .needs-help h2,
 .feed-heading {
@@ -1089,7 +1087,7 @@ a.tile:hover h3,
   padding: 16px 18px;
   border-radius: var(--card-radius);
 }
-.help-card-link:hover { background: var(--bg); }
+.help-card-link:hover { background: var(--surface-muted); }
 .help-card-link:focus-visible { outline-offset: -3px; }
 .help-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .help-more { flex: 0 0 auto; display: flex; justify-content: center; align-items: center; padding: 16px 18px; }
