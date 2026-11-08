@@ -1074,7 +1074,8 @@ a.tile:hover h3,
 .help-strip::-webkit-scrollbar { display: none; }
 .help-card {
   flex: 0 0 calc(100% - 32px); /* nearly a full viewport, with the next card peeking */
-  border: none;
+  min-height: 230px;
+  border: 1px solid var(--border);
   border-radius: var(--card-radius);
   background: var(--surface);
   scroll-snap-align: start;

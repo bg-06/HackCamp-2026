@@ -55,7 +55,7 @@ export default function HomePage() {
   const [area, setArea] = useState(() => localStorage.getItem('issue-area') ?? '');
   const [category, setCategory] = useState('');
   const [myVotesOnly, setMyVotesOnly] = useState(false);
-  const [showAllHotspots, setShowAllHotspots] = useState(false);
+  const [hotspotLimit, setHotspotLimit] = useState(3);
   const contentRef = useRef<HTMLElement>(null);
 
   // Back from a card: put the list where it was
@@ -145,7 +145,7 @@ export default function HomePage() {
   const openHotspots = here
     ? places.sort((a, b) => (distanceTo(here, a.hotspot) ?? Infinity) - (distanceTo(here, b.hotspot) ?? Infinity))
     : spreadByArea(places);
-  const hotspotsShown = showAllHotspots ? openHotspots : openHotspots.slice(0, 3);
+  const hotspotsShown = openHotspots.slice(0, hotspotLimit);
   const sampleCount = (events.items ?? []).filter((e) => e.sample).length;
 
   function pickSort(key: SortKey) {
@@ -240,10 +240,10 @@ export default function HomePage() {
             </li>
           );
         })}
-        {!showAllHotspots && openHotspots.length > hotspotsShown.length && (
+        {openHotspots.length > hotspotsShown.length && (
           <li className="help-card help-more">
-            <button className="chip-button" onClick={() => setShowAllHotspots(true)}>
-              Show all {openHotspots.length}
+            <button className="chip-button" onClick={() => setHotspotLimit((n) => n + 5)}>
+              Show {Math.min(5, openHotspots.length - hotspotsShown.length)} more
             </button>
           </li>
         )}
