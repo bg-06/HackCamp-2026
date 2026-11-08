@@ -20,9 +20,12 @@ the existing text user IDs store verified Auth0 `sub` values.
   under the JWKS resolver's refresh/cooldown rules.
 - `X-Demo-User`, body user IDs and unsigned JWT decoding cannot set identity.
   Personal data, daily vote usage, event ownership and comments use verified `sub`.
-- Client-credentials / `@clients` machine identities return 403 on this resident API.
-  Future agent endpoints need a separate scoped authorization policy; this branch
-  does not grant resident powers to an agent or implement org-admin/moderator roles.
+- Client-credentials / `@clients` machine tokens are accepted only on `/agent/*`, and only with
+  the route's scope (`suggestions:post`, `briefings:post`). Everywhere else they get 403, even on
+  public reads, and resident tokens get 403 on `/agent/*`. Machines never gain a resident identity.
+  Org-admin/moderator roles are not implemented yet.
+- No route returns an Auth0 user id. Comments and hosted events show the `profiles` display name
+  the frontend saves after sign-in (first name + last initial), or "Neighbour" / "A neighbour".
 - Key-service failures return 503 and fail closed. Tokens are not printed or returned
   in errors. 401 responses include a Bearer `WWW-Authenticate` challenge.
 - There is no auth-disable/demo-mode setting. Missing or malformed Auth0 configuration

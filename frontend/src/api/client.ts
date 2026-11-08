@@ -180,9 +180,15 @@ export async function getMyHistory(): Promise<VolunteerRecord[]> {
   return request<VolunteerRecord[]>("/me/history");
 }
 
+/** Sets the name shown on your comments and the events you host. Real API only. */
+export async function saveDisplayName(displayName: string): Promise<void> {
+  if (USE_MOCK) return;
+  await request<{ displayName: string }>("/me/profile", { method: "PUT", body: JSON.stringify({ displayName }) });
+}
+
 // ---------- Comments (the discussion under each post) ----------
 
-// Shown as the author in mock mode. With Auth0 the backend sets the author from the token.
+// Shown as the author in mock mode. With Auth0 the backend uses your saved display name.
 const MOCK_ME = { author: "You", authorKind: "resident" as const };
 
 const commentsPath = (type: CommentTarget, id: string) =>

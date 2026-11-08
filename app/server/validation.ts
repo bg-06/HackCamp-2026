@@ -50,3 +50,59 @@ export function parseNewEvent(input: unknown, now = new Date()) {
     lat: b.lat as number | undefined, lng: b.lng as number | undefined,
   }
 }
+
+/** A public display name: 1–60 characters, no control characters or angle brackets. */
+export function parseDisplayName(value: unknown): string {
+  const name = typeof value === 'string' ? value.normalize('NFC').replace(/\s+/g, ' ').trim() : ''
+  // eslint-disable-next-line no-control-regex
+  if (!name || name.length > 60 || /[\u0000-\u001f\u007f<>]/.test(name))
+    throw new ApiError(400, 'displayName must contain 1–60 characters, without < or >')
+  return name
+}
+
+function object(value: unknown, field: string): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ApiError(400, `${field} must be a JSON object`)
+  return value as Record<string, unknown>
+}
+
+function dedupeKey(value: unknown, prefix: string): string {
+  const key = text(value, 'dedupe_key', 300)!
+  if (!key.startsWith(prefix)) throw new ApiError(400, `dedupe_key must start with ${prefix}`)
+  return key
+}
+
+/** POST /agent/suggestions body (agent/README.md "Payload contract"). */
+export function parseSuggestion(input: unknown) {
+  const b = object(input, 'body')
+  if (b.kind !== 'suggestion') throw new ApiError(400, 'kind must be "suggestion"')
+  const orgIds = b.org_ids
+  if (!Array.isArray(orgIds) || orgIds.length > 50 || !orgIds.every(id => typeof id === 'string' && id.length >= 1 && id.length <= 100))
+    throw new ApiError(400, 'org_ids must be an array of up to 50 org ids')
+  const draft = object(b.event_draft, 'event_draft')
+  const hotspot = object(b.hotspot, 'hotspot')
+  if (b.city_program !== null) object(b.city_program, 'city_program')
+  return {
+    localArea: text(b.local_area, 'local_area', 100)!,
+    title: text(b.title, 'title', 200)!,
+    body: text(b.body, 'body', 5000)!,
+    orgIds: [...new Set(orgIds as string[])],
+    hotspotId: text(draft.hotspot_id, 'event_draft.hotspot_id', 500)!,
+    dedupeKey: dedupeKey(b.dedupe_key, 'suggestion:'),
+    payload: { event_draft: draft, hotspot, city_program: b.city_program, org_ids: orgIds },
+  }
+}
+
+/** POST /agent/briefings body (agent/README.md "Payload contract"). */
+export function parseBriefing(input: unknown) {
+  const b = object(input, 'body')
+  if (b.kind !== 'briefing') throw new ApiError(400, 'kind must be "briefing"')
+  if (typeof b.week_of !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(b.week_of) || !Number.isFinite(Date.parse(b.week_of)))
+    throw new ApiError(400, 'week_of must be a YYYY-MM-DD date')
+  return {
+    localArea: text(b.local_area, 'local_area', 100)!,
+    title: text(b.title, 'title', 200)!,
+    body: text(b.body, 'body', 5000)!,
+    dedupeKey: dedupeKey(b.dedupe_key, 'briefing:'),
+    payload: { week_of: b.week_of, model: text(b.model, 'model', 100)! },
+  }
+}

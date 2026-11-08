@@ -1,5 +1,5 @@
 import { ChevronDown, LocateFixed, TriangleAlert } from "lucide-react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { USE_MOCK } from "../api/client";
 import EventTile from "../components/EventTile";
@@ -44,6 +44,8 @@ export default function HomePage() {
     setSearchOpen,
     getScroll,
     saveScroll,
+    getIssueLimit,
+    saveIssueLimit,
     setMyVote,
     requireSignIn,
   } = useFeed();
@@ -85,6 +87,34 @@ export default function HomePage() {
     });
   }
 
+  const issueById = new Map((issues.items ?? []).map((i) => [i.issue_id, i]));
+  const shownIssues = (issueOrder?.ids ?? []).flatMap((id) => issueById.get(id) ?? []);
+  // Draw the list 50 rows at a time; more load as you near the end (or with the button).
+  const [, redraw] = useState(0);
+  const issueLimit = getIssueLimit(orderKey);
+  const visibleIssues = shownIssues.slice(0, issueLimit);
+  const moreIssues = shownIssues.length - visibleIssues.length;
+  const showMoreIssues = () => {
+    saveIssueLimit(orderKey, issueLimit + 50);
+    redraw((n) => n + 1);
+  };
+  const hasMoreIssues = moreIssues > 0;
+  const moreRef = useRef<HTMLButtonElement>(null);
+  const showMoreRef = useRef(showMoreIssues);
+  useEffect(() => {
+    showMoreRef.current = showMoreIssues;
+  });
+  useEffect(() => {
+    const el = moreRef.current;
+    if (!el || !("IntersectionObserver" in window)) return;
+    const io = new IntersectionObserver((entries) => entries[0]?.isIntersecting && showMoreRef.current(), {
+      root: contentRef.current,
+      rootMargin: "600px",
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasMoreIssues, tab]);
+
   // Only "/" and "/issues" belong to this page.
   if (tabParam !== undefined && tabParam !== "issues") return <Navigate to="/" replace />;
 
@@ -99,8 +129,6 @@ export default function HomePage() {
     eventSort,
     ctx,
   );
-  const issueById = new Map((issues.items ?? []).map((i) => [i.issue_id, i]));
-  const shownIssues = (issueOrder?.ids ?? []).flatMap((id) => issueById.get(id) ?? []);
   const totalVotes = (issues.items ?? []).reduce((n, i) => n + issueScore(i).up, 0);
 
   // Spots that keep getting reported and have nothing planned yet
@@ -335,7 +363,7 @@ export default function HomePage() {
         {tab === "issues" && shownIssues.length > 0 && (
           <>
             <ul className="issue-list" aria-label="Issues">
-              {shownIssues.map((i) => (
+              {visibleIssues.map((i) => (
                 <li key={i.issue_id}>
                   <IssueRow
                     issue={i}
@@ -346,6 +374,11 @@ export default function HomePage() {
                 </li>
               ))}
             </ul>
+            {moreIssues > 0 && (
+              <button ref={moreRef} className="action-button secondary" onClick={showMoreIssues}>
+                Show {Math.min(50, moreIssues)} more of {moreIssues}
+              </button>
+            )}
             <a className="action-button council" href={councilMailto()}>
               Send the top 5 to Council
             </a>

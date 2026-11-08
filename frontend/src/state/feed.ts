@@ -34,6 +34,9 @@ export interface Feed {
   setSearchOpen: (tab: FeedTab, open: boolean) => void;
   getScroll: (tab: FeedTab) => number;
   saveScroll: (tab: FeedTab, top: number) => void;
+  // How many issue rows are drawn, for one list order (key), so coming back keeps your place
+  getIssueLimit: (key: string) => number;
+  saveIssueLimit: (key: string, n: number) => void;
 
   // Update the list right away, then the backend. Resolves false (and undoes it) if the request failed.
   setMyVote: (issueId: string, value: Vote) => Promise<boolean>;

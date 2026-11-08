@@ -4,8 +4,8 @@
 import express, { type NextFunction, type Request, type Response, type RequestHandler } from 'express'
 import { cellToLatLng, isValidCell, latLngToCell, getResolution } from 'h3-js'
 import type { Sql, TransactionSql } from 'postgres'
-import { parseNewEvent, ApiError, pageLimit } from './validation.js'
-import { userId, viewerId } from './auth.js'
+import { parseNewEvent, ApiError, pageLimit, parseDisplayName, parseSuggestion, parseBriefing } from './validation.js'
+import { requireScope, userId, viewerId } from './auth.js'
 
 function centre(h3: string | null): { lat?: number; lng?: number } {
   if (!h3 || !isValidCell(h3)) return {}
@@ -26,16 +26,21 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
     is_sample: boolean; latitude: number | null; longitude: number | null; h3_r9: string | null
     created_at: Date; created_by: string | null; done_at: Date | null; hotspot_id: string | null
     source_withdrawn_at: Date | null; spots_taken: number; going: boolean; comment_count: number
+    hosted_by_me: boolean
     has_image: boolean
     hs_request_type: string | null; hs_times_reported: number | null; hs_months_seen: number | null
   }
 
+  // Residents host 'hotspot' events; show their display name, never their Auth0 id (needs `profiles p`).
+  const organiserName = sql`CASE WHEN e.kind = 'hotspot' THEN coalesce(p.display_name, 'A neighbour') ELSE e.organiser END`
+
   // spots_taken leaves out the caller's own RSVP; that is `going` (see types.ts).
   function eventQuery(user: string | null, where: ReturnType<typeof sql>) {
     return sql<EventRow[]>`
-      SELECT e.id, e.kind, e.title, e.organiser, e.category, e.starts_at, e.ends_at, e.location,
+      SELECT e.id, e.kind, e.title, ${organiserName} AS organiser, e.category, e.starts_at, e.ends_at, e.location,
              e.local_area, e.spots_total, e.what_to_bring, e.signup_url, e.is_sample,
              e.latitude, e.longitude, e.h3_r9, e.created_at, e.created_by, e.done_at, e.hotspot_id, e.source_withdrawn_at,
+             coalesce(e.created_by = ${user}, false) AS hosted_by_me,
              (SELECT count(*)::int FROM comments c WHERE c.event_id = e.id AND NOT c.hidden) AS comment_count,
              EXISTS (SELECT 1 FROM event_images i WHERE i.event_id = e.id) AS has_image,
              count(r.user_id) FILTER (WHERE ${user}::text IS NULL OR r.user_id <> ${user})::int AS spots_taken,
@@ -44,10 +49,11 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
              h.months_seen::int AS hs_months_seen
       FROM events e
       LEFT JOIN rsvps r ON r.event_id = e.id
+      LEFT JOIN profiles p ON p.user_id = e.created_by
       -- hotspot_id is "<h3_r9>|<request_type>" for events started from a help hotspot
       LEFT JOIN gold_help_hotspots h ON e.hotspot_id IN (h.h3_r9 || '|' || h.request_type, h.h3_r9 || ':' || h.request_type)
       WHERE ${where}
-      GROUP BY e.id, h.h3_r9, h.request_type
+      GROUP BY e.id, h.h3_r9, h.request_type, p.user_id
       ORDER BY e.starts_at NULLS LAST, e.id`
   }
 
@@ -77,7 +83,7 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
       going: r.going,
       commentCount: r.comment_count,
       hotspotId: r.hotspot_id ?? undefined,
-      createdBy: r.created_by ?? undefined,
+      hostedByMe: r.hosted_by_me,
       doneAt: iso(r.done_at),
       withdrawn: r.source_withdrawn_at !== null,
     }
@@ -132,7 +138,7 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
 
   // ---------- Comments ----------
 
-  type CommentRow = { id: string; event_id: string | null; issue_id: string | null; user_id: string; body: string; created_at: Date }
+  type CommentRow = { id: string; event_id: string | null; issue_id: string | null; author: string | null; body: string; created_at: Date }
 
   function toComment(r: CommentRow) {
     return {
@@ -140,7 +146,7 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
       targetType: r.event_id ? 'event' : 'issue',
       targetId: r.event_id ?? r.issue_id,
       body: r.body,
-      author: r.user_id, // TEMPORARY: a display name once Auth0 gives us one
+      author: r.author ?? 'Neighbour', // display name from profiles; the Auth0 id is never sent
       authorKind: 'resident',
       createdAt: r.created_at.toISOString(),
     }
@@ -171,6 +177,21 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
     await tx`SELECT votes_used FROM vote_daily_usage WHERE user_id = ${user}
              AND vote_day = (current_timestamp AT TIME ZONE 'America/Vancouver')::date FOR UPDATE`
   }
+
+  // The name shown on your comments and the events you host. The frontend sets it from your Auth0
+  // profile after sign-in; anyone can see it, so it's a display name, not an identifier.
+  app.get('/me/profile', async (req, res) => {
+    const [row] = await sql<{ display_name: string }[]>`SELECT display_name FROM profiles WHERE user_id = ${userId(req)}`
+    res.json({ displayName: row?.display_name ?? null })
+  })
+
+  app.put('/me/profile', async (req, res) => {
+    const user = userId(req)
+    const name = parseDisplayName(req.body?.displayName)
+    await sql`INSERT INTO profiles (user_id, display_name) VALUES (${user}, ${name})
+      ON CONFLICT (user_id) DO UPDATE SET display_name = EXCLUDED.display_name, updated_at = now()`
+    res.json({ displayName: name })
+  })
 
   app.get('/me/votes', async (req, res) => { res.json(await voteBudget(userId(req))) })
 
@@ -216,7 +237,8 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
       const [event] = await tx<{ id: string }[]>`INSERT INTO events
         (kind, title, organiser, category, starts_at, ends_at, location, local_area, spots_total,
          what_to_bring, latitude, longitude, h3_r9, hotspot_id, created_by, is_sample)
-        VALUES ('hotspot', ${input.title}, ${user}, ${category}, ${input.startsAt}, ${input.endsAt},
+        VALUES ('hotspot', ${input.title},
+                coalesce((SELECT display_name FROM profiles WHERE user_id = ${user}), 'A neighbour'), ${category}, ${input.startsAt}, ${input.endsAt},
                 ${input.location}, ${localArea}, ${input.spotsTotal}, ${input.whatToBring ?? null},
                 ${lat}, ${lng}, ${h3}, ${hotspotId}, ${user}, false) RETURNING id`
       await tx`INSERT INTO rsvps (event_id, user_id) VALUES (${event!.id}, ${user})`
@@ -228,9 +250,9 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
 
   app.get('/me/history', async (req, res) => {
     const rows = await sql<{ id: string; title: string | null; organiser: string | null; date: Date; hours: number; sample: boolean }[]>`
-      SELECT e.id, e.title, e.organiser, e.starts_at AS date, e.is_sample AS sample,
+      SELECT e.id, e.title, ${organiserName} AS organiser, e.starts_at AS date, e.is_sample AS sample,
         round(greatest(0, extract(epoch FROM (least(coalesce(e.ends_at, e.done_at), e.done_at) - e.starts_at))) / 3600, 2)::float8 AS hours
-      FROM events e JOIN rsvps r ON r.event_id = e.id
+      FROM events e JOIN rsvps r ON r.event_id = e.id LEFT JOIN profiles p ON p.user_id = e.created_by
       WHERE r.user_id = ${userId(req)} AND e.done_at IS NOT NULL AND e.starts_at IS NOT NULL
       ORDER BY e.starts_at DESC, e.id`
     res.json(rows.map(r => ({ ...r, title: r.title ?? 'Untitled event',
@@ -401,9 +423,10 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
 
     app.get(`/${target}/:id/comments`, async (req, res) => {
       const rows = await sql<CommentRow[]>`
-        SELECT id, event_id, issue_id, user_id, body, created_at FROM comments
-        WHERE ${col} = ${req.params.id} AND NOT hidden
-        ORDER BY created_at, id`
+        SELECT c.id, c.event_id, c.issue_id, p.display_name AS author, c.body, c.created_at
+        FROM comments c LEFT JOIN profiles p ON p.user_id = c.user_id
+        WHERE c.${col} = ${req.params.id} AND NOT c.hidden
+        ORDER BY c.created_at, c.id`
       res.json(rows.map(toComment))
     })
 
@@ -414,12 +437,67 @@ export function createApp(sql: Sql, authentication: RequestHandler) {
         ? await sql`SELECT 1 FROM events WHERE id = ${req.params.id}`
         : await sql`SELECT 1 FROM gold_track2_issues WHERE issue_id = ${req.params.id}`
       if (found.length === 0) return void res.status(404).json({ error: `${target.slice(0, -1)} not found` })
+      const user = userId(req)
       const [row] = await sql<CommentRow[]>`
-        INSERT INTO comments (${col}, user_id, body) VALUES (${req.params.id}, ${userId(req)}, ${body})
-        RETURNING id, event_id, issue_id, user_id, body, created_at`
+        INSERT INTO comments (${col}, user_id, body) VALUES (${req.params.id}, ${user}, ${body})
+        RETURNING id, event_id, issue_id, (SELECT display_name FROM profiles WHERE user_id = ${user}) AS author, body, created_at`
       res.status(201).json(toComment(row!))
     })
   }
+
+  // ---------- Block Steward agent (Auth0 machine tokens, agent/README.md) ----------
+  // Suggestions are stored 'pending' for org admins to accept or dismiss; briefings are published.
+  // A repeat is answered 200 with stored: 0, so the agent doesn't count it as a failed send.
+
+  app.post('/agent/suggestions', async (req, res) => {
+    requireScope(req, 'suggestions:post')
+    const s = parseSuggestion(req.body)
+    // The agent writes "<h3>:<type>", the app "<h3>|<type>"; H3 ids have no ':' so the first one is the separator.
+    const hotspotId = s.hotspotId.replace(':', '|')
+    const result = await sql.begin(async tx => {
+      if (s.orgIds.length) {
+        const known = await tx<{ id: string }[]>`SELECT id FROM orgs WHERE id IN ${tx(s.orgIds)}`
+        const missing = s.orgIds.filter(id => !known.some(k => k.id === id))
+        if (missing.length) throw new ApiError(400, 'unknown org_ids', { missing })
+      }
+      let stored = 0, skipped = 0
+      for (const orgId of s.orgIds.length ? s.orgIds : [null]) {
+        // A pending or dismissed suggestion for this hotspot and org in the last 14 days wins.
+        const recent = await tx`SELECT 1 FROM posts WHERE kind = 'suggestion' AND hotspot_id = ${hotspotId}
+          AND org_id IS NOT DISTINCT FROM ${orgId} AND status IN ('pending', 'dismissed')
+          AND created_at > now() - interval '14 days' LIMIT 1`
+        if (recent.length) { skipped++; continue }
+        const inserted = await tx`INSERT INTO posts (local_area, kind, author, org_id, title, body, status, payload, dedupe_key, hotspot_id)
+          VALUES (${s.localArea}, 'suggestion', 'block-steward-agent', ${orgId}, ${s.title}, ${s.body}, 'pending',
+                  ${tx.json(s.payload as never)}, ${s.dedupeKey}, ${hotspotId})
+          ON CONFLICT DO NOTHING RETURNING id`
+        if (inserted.length) stored++; else skipped++
+      }
+      return { stored, skipped }
+    })
+    res.status(result.stored ? 201 : 200).json(result)
+  })
+
+  app.post('/agent/briefings', async (req, res) => {
+    requireScope(req, 'briefings:post')
+    const b = parseBriefing(req.body)
+    const inserted = await sql`INSERT INTO posts (local_area, kind, author, title, body, status, payload, dedupe_key)
+      VALUES (${b.localArea}, 'briefing', 'block-steward-agent', ${b.title}, ${b.body}, 'published',
+              ${sql.json(b.payload)}, ${b.dedupeKey})
+      ON CONFLICT DO NOTHING RETURNING id`
+    res.status(inserted.length ? 201 : 200).json({ stored: inserted.length, skipped: 1 - inserted.length })
+  })
+
+  // Published briefings, newest first. Body is plain text: render with white-space: pre-wrap, never as HTML.
+  app.get('/briefings', async (req, res) => {
+    const area = typeof req.query.area === 'string' ? req.query.area : null
+    const rows = await sql<{ id: string; local_area: string; title: string | null; body: string; payload: { week_of?: string } | null; created_at: Date }[]>`
+      SELECT id, local_area, title, body, payload, created_at FROM posts
+      WHERE kind = 'briefing' AND status = 'published' AND ${area ? sql`local_area = ${area}` : sql`true`}
+      ORDER BY created_at DESC, id DESC LIMIT 50`
+    res.json(rows.map(r => ({ id: String(r.id), localArea: r.local_area, title: r.title ?? `This week in ${r.local_area}`,
+      body: r.body, weekOf: r.payload?.week_of ?? null, createdAt: r.created_at.toISOString() })))
+  })
 
   // Errors come back as JSON, never as an HTML stack trace.
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
