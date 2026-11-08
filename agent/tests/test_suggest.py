@@ -150,10 +150,11 @@ def test_payload_contract_keys_and_values():
     assert p["kind"] == "suggestion"
     assert p["author"] == "block-steward-agent"
     assert p["local_area"] == "Mount Pleasant"
-    assert p["title"] == "Host a cleanup near Mount Pleasant?"
+    assert p["title"] == "Host a cleanup for small abandoned items in Mount Pleasant?"
     assert set(p["hotspot"]) == {"h3_r9", "request_type", "category",
                                  "times_reported", "months_seen", "last_reported"}
     assert p["hotspot"]["last_reported"].startswith("2026-11-05T")
+    assert p["hotspot"]["last_reported"].endswith("-08:00")
     d = p["event_draft"]
     assert set(d) == {"kind", "title", "category", "local_area", "latitude",
                       "longitude", "hotspot_id", "what_to_bring", "signup_url"}
@@ -167,7 +168,60 @@ def test_payload_contract_keys_and_values():
 
 def test_dedupe_key_format():
     p = suggest([hs()], [], [], TODAY)[0]
-    assert p["dedupe_key"] == f"suggestion:{CELL_A}:{DUMP}:2026-11-08"
+    assert p["dedupe_key"] == f"suggestion:{CELL_A}:{DUMP}:2026-W45"
+
+
+def test_dedupe_key_is_stable_within_iso_week_and_changes_next_week():
+    mon = suggest([hs()], [], [], date(2026, 11, 2))[0]["dedupe_key"]
+    sun = suggest([hs()], [], [], date(2026, 11, 8))[0]["dedupe_key"]
+    nxt = suggest([hs()], [], [], date(2026, 11, 9))[0]["dedupe_key"]
+    assert mon == sun and nxt.endswith(":2026-W46")
+
+
+def test_last_reported_gets_vancouver_offset():
+    naive = suggest([hs(last=datetime(2026, 11, 5, 10, 0))], [], [], TODAY)[0]
+    assert naive["hotspot"]["last_reported"] == "2026-11-05T10:00:00-08:00"
+    aware = suggest([hs(last=datetime(2026, 7, 5, 17, 0, tzinfo=timezone.utc))], [], [], TODAY)[0]
+    assert aware["hotspot"]["last_reported"] == "2026-07-05T10:00:00-07:00"
+
+
+def _free_event(days=3, area="Mount Pleasant", cat="Garbage and Dumping", **kw):
+    e = ev(cell=None, days=days)
+    e.update({"local_area": area, "category": cat, "latitude": None, "longitude": None})
+    e.update(kw)
+    return e
+
+
+def test_event_covers_via_lat_lng_when_no_h3():
+    lat, lng = h3.cell_to_latlng(CELL_A)
+    assert suggest([hs()], [_free_event(area="Elsewhere", latitude=lat, longitude=lng)], [], TODAY) == []
+    lat2, lng2 = h3.cell_to_latlng(CELL_B)
+    assert len(suggest([hs()], [_free_event(area="Elsewhere", latitude=lat2, longitude=lng2)], [], TODAY)) == 1
+
+
+def test_event_with_h3_set_ignores_area_category_fallback():
+    e = _free_event()
+    e["h3_r9"] = CELL_B
+    assert len(suggest([hs()], [e], [], TODAY)) == 1
+
+
+def test_event_with_one_coordinate_only_falls_to_area_category():
+    assert suggest([hs()], [_free_event(latitude=49.26)], [], TODAY) == []
+
+
+def test_event_same_area_and_category_covers():
+    assert suggest([hs()], [_free_event()], [], TODAY) == []
+
+
+def test_area_category_fallback_respects_window_and_done():
+    assert len(suggest([hs()], [_free_event(days=20)], [], TODAY)) == 1
+    done = datetime(2026, 11, 9, tzinfo=timezone.utc)
+    assert len(suggest([hs()], [_free_event(done_at=done)], [], TODAY)) == 1
+
+
+def test_area_category_fallback_needs_same_category_and_area():
+    assert len(suggest([hs()], [_free_event(cat="Graffiti")], [], TODAY)) == 1
+    assert len(suggest([hs()], [_free_event(area="Strathcona")], [], TODAY)) == 1
 
 
 def test_body_plain_text_and_data_numbers_only():
@@ -176,7 +230,7 @@ def test_body_plain_text_and_data_numbers_only():
     assert "9 times over 6 months" in body
     assert "Nov 5" in body
     assert "Mount Pleasant" in body
-    assert "next two weeks" in body
+    assert "No neighbour event is planned at this spot in the next two weeks." in body
     assert set(re.findall(r"\d+", body)) <= {"9", "6", "5"}
     assert 2 <= len(re.findall(r"[.?!](?:\s|$)", body)) <= 4
 
@@ -201,8 +255,16 @@ def test_last_reported_date_shown_in_vancouver_time():
 
 def test_graffiti_title_is_category_appropriate():
     p = suggest([hs(rt=TAG, cat="Graffiti")], [], [], TODAY)[0]
-    assert p["title"] == "Organise a graffiti walk near Mount Pleasant?"
-    assert p["event_draft"]["title"] == "Graffiti walk near Mount Pleasant"
+    assert p["title"] == "Organise a graffiti walk in Mount Pleasant?"
+    assert p["event_draft"]["title"] == "Graffiti walk in Mount Pleasant"
+
+
+def test_titles_use_plain_words_and_differ_per_type():
+    a = suggest([hs()], [], [], TODAY)[0]
+    b = suggest([hs(rt="Loose Litter Clean Up Case")], [], [], TODAY)[0]
+    assert a["title"] != b["title"]
+    assert a["event_draft"]["title"] == "Cleanup: small abandoned items in Mount Pleasant"
+    assert b["title"] == "Host a cleanup for loose litter in Mount Pleasant?"
 
 
 def test_verb_agreement_per_phrase():

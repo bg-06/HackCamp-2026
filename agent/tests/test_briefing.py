@@ -51,7 +51,17 @@ def test_contract_keys_and_template():
     assert p["model"] == "template"
     assert p["week_of"] == "2026-11-02"
     assert p["dedupe_key"] == "briefing:Mount Pleasant:2026-11-02"
-    assert len(p["body"].split("\n\n")) == 3
+    assert len(p["body"].split("\n\n")) == 4  # intro, summary, City issues, way to help
+
+
+def test_summary_has_own_paragraph_and_is_trimmed_to_two_sentences():
+    long = {"local_area": "Mount Pleasant",
+            "summary": "First sentence here. Second one follows. Third is dropped. Fourth too."}
+    body = build_briefing("Mount Pleasant", long, [], [], [], TODAY)["body"]
+    paras = body.split("\n\n")
+    assert paras[1] == "First sentence here. Second one follows."
+    assert "Third" not in body and "Fourth" not in body
+    assert "First sentence" not in paras[0]
 
 
 def test_template_content_uses_data_only_and_vancouver_dates():

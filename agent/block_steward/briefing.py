@@ -72,11 +72,17 @@ def _hotspot_text(types) -> str:
     return ", ".join(f"{_n(c, 'spot')} for {plain_words(rt)}" for rt, c in types)
 
 
+def _short_summary(summary: str) -> str:
+    """First two sentences of the area summary (split on '. ')."""
+    parts = summary.split(". ")
+    if len(parts) <= 2:
+        return summary
+    return ". ".join(parts[:2]).rstrip(".") + "."
+
+
 def _template(area, f) -> str:
     # Paragraph 1: help this week
     p1 = [f"Here is what is happening in {area} this week."]
-    if f["summary"]:
-        p1.append(f["summary"])
     if f["events"]:
         lines = "\n".join(f"- {_event_text(e)}" for e in f["events"])
         p1.append("Coming up in the next 7 days:\n" + lines)
@@ -105,7 +111,10 @@ def _template(area, f) -> str:
     else:
         p3 = ("One way to help: take a short walk this week and report anything "
               "that needs fixing in Van311.")
-    return "\n\n".join([_join_p1(p1), p2, p3])
+    paragraphs = [_join_p1(p1)]
+    if f["summary"]:
+        paragraphs.append(_short_summary(f["summary"]))
+    return "\n\n".join(paragraphs + [p2, p3])
 
 
 def _join_p1(parts) -> str:

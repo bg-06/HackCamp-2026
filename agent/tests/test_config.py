@@ -55,3 +55,9 @@ def test_repr_hides_secrets(tmp_path):
     text = repr(s) + str(s)
     for secret in ("hunter2", "gkey123", "sec456"):
         assert secret not in text
+
+
+def test_env_file_with_utf8_bom(tmp_path):
+    (tmp_path / "env").write_bytes(b"\xef\xbb\xbfPOSTGRES_HOST=bom.example\nPOSTGRES_DB=x\n")
+    s = load_settings(root=tmp_path, environ={})
+    assert s.postgres_host == "bom.example"

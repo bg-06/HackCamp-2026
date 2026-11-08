@@ -3,22 +3,25 @@
 Inputs (plain dicts, e.g. rows from psycopg with dict_row):
   hotspots: h3_r9, request_type, category, local_area, times_reported,
             months_seen, last_reported (datetime)
-  events:   h3_r9, done_at (None if not done), starts_at (datetime)
+  events:   h3_r9, latitude, longitude, local_area, category (all may be None),
+            done_at (None if not done), starts_at (datetime)
   orgs:     id, name, latitude, longitude (may be None)
   today:    datetime.date
 
 suggest() returns a list of suggestion payloads (see agent/README.md contract)
-for recurring hotspots with no event in [today, today + window_days].
+for recurring hotspots with no event in [today, today + window_days]. An event
+covers a hotspot by cell (h3_r9, else its latitude/longitude) or, when it has no
+cell and no coordinates, by the same local_area and category.
 """
 from __future__ import annotations
 
 import math
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 
 import h3
 
-from .timeutil import as_date as _as_date
+from .timeutil import LOCAL_TZ, as_date as _as_date
 from .programs import CLEANUP_LINE, is_graffiti, program_for
 from .wording import is_plural, plain_words
 
@@ -36,15 +39,31 @@ def _haversine_km(lat1, lng1, lat2, lng2) -> float:
     return 6371.0088 * 2 * math.asin(math.sqrt(a))
 
 
-def _covered_cells(events, today, window_days) -> set:
-    cells = set()
+def _event_cell(e):
+    """Cell of an event: h3_r9 if set, else from latitude/longitude, else None."""
+    if e.get("h3_r9"):
+        return e["h3_r9"]
+    lat, lng = e.get("latitude"), e.get("longitude")
+    if lat is not None and lng is not None:
+        return h3.latlng_to_cell(float(lat), float(lng), 9)
+    return None
+
+
+def _coverage(events, today, window_days):
+    """Return (covered cells, covered (local_area, category) pairs)."""
+    cells, pairs = set(), set()
     for e in events:
         if e.get("done_at") is not None or e.get("starts_at") is None:
             continue
         offset = (_as_date(e["starts_at"]) - today).days
-        if 0 <= offset <= window_days:
-            cells.add(e.get("h3_r9"))
-    return cells
+        if not 0 <= offset <= window_days:
+            continue
+        cell = _event_cell(e)
+        if cell is not None:
+            cells.add(cell)
+        elif e.get("local_area") and e.get("category"):
+            pairs.add((e["local_area"], e["category"]))
+    return cells, pairs
 
 
 def _nearest_org_ids(lat, lng, orgs, max_orgs) -> list:
@@ -76,7 +95,7 @@ def _body(h: dict, program) -> str:
         f"{_count(h['months_seen'], 'month')} "
         f"in this part of {h['local_area']}, most recently on "
         f"{_short_date(h['last_reported'])}.",
-        "Nothing is planned here in the next two weeks.",
+        "No neighbour event is planned at this spot in the next two weeks.",
     ]
     if is_graffiti(h):
         sentences.append(
@@ -89,19 +108,33 @@ def _body(h: dict, program) -> str:
     return " ".join(sentences)
 
 
+def _iso_week(d: date) -> str:
+    year, week, _ = d.isocalendar()
+    return f"{year}-W{week:02d}"
+
+
+def _local_iso(value):
+    """ISO string with the Vancouver offset (naive values are local already)."""
+    if not isinstance(value, datetime):
+        return value.isoformat() if hasattr(value, "isoformat") else value
+    value = (value.replace(tzinfo=LOCAL_TZ) if value.tzinfo is None
+             else value.astimezone(LOCAL_TZ))
+    return value.isoformat()
+
+
 def _payload(h: dict, today: date, orgs, max_orgs) -> dict:
     lat, lng = h3.cell_to_latlng(h["h3_r9"])
     graffiti = is_graffiti(h)
     program = program_for(h)
     area = h["local_area"]
-    last = h["last_reported"]
+    what = plain_words(h["request_type"])
     return {
         "kind": "suggestion",
         "author": AUTHOR,
         "local_area": area,
         "org_ids": _nearest_org_ids(lat, lng, orgs, max_orgs),
-        "title": (f"Organise a graffiti walk near {area}?" if graffiti
-                  else f"Host a cleanup near {area}?"),
+        "title": (f"Organise a graffiti walk in {area}?" if graffiti
+                  else f"Host a cleanup for {what} in {area}?"),
         "body": _body(h, program),
         "hotspot": {
             "h3_r9": h["h3_r9"],
@@ -109,11 +142,12 @@ def _payload(h: dict, today: date, orgs, max_orgs) -> dict:
             "category": h["category"],
             "times_reported": h["times_reported"],
             "months_seen": h["months_seen"],
-            "last_reported": last.isoformat() if hasattr(last, "isoformat") else last,
+            "last_reported": _local_iso(h["last_reported"]),
         },
         "event_draft": {
             "kind": "hotspot",
-            "title": f"{'Graffiti walk' if graffiti else 'Cleanup'} near {area}",
+            "title": (f"Graffiti walk in {area}" if graffiti
+                      else f"Cleanup: {what} in {area}"),
             "category": h["category"],
             "local_area": area,
             "latitude": lat,
@@ -124,18 +158,18 @@ def _payload(h: dict, today: date, orgs, max_orgs) -> dict:
             "signup_url": None,
         },
         "city_program": program,
-        "dedupe_key": f"suggestion:{h['h3_r9']}:{h['request_type']}:{today.isoformat()}",
+        "dedupe_key": f"suggestion:{h['h3_r9']}:{h['request_type']}:{_iso_week(today)}",
     }
 
 
 def suggest(hotspots, events, orgs, today, *, window_days=14, max_per_area=3,
             max_orgs=3, areas=None) -> list[dict]:
-    covered = _covered_cells(events, today, window_days)
+    covered, covered_pairs = _coverage(events, today, window_days)
     wanted = set(areas) if areas else None
     by_area = defaultdict(list)
     for h in hotspots:
         area = h.get("local_area")
-        if not area or h["h3_r9"] in covered:
+        if not area or h["h3_r9"] in covered or (area, h.get("category")) in covered_pairs:
             continue
         if wanted is not None and area not in wanted:
             continue

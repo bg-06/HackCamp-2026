@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import sys
 import time
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -18,10 +19,40 @@ from .timeutil import LOCAL_TZ
 OUT_DIR = Path(__file__).resolve().parents[1] / "out"
 SUGGEST_AT = (7, 0)   # daily, Vancouver time
 BRIEF_AT = (8, 0)     # Mondays, Vancouver time
+RETRY_AFTER = timedelta(minutes=30)
+MAX_TRIES = 3
+
+
+@dataclass
+class RunResult:
+    sent: int = 0
+    failed: int = 0
+
+    @property
+    def ok(self) -> bool:
+        return self.failed == 0
+
+
+def _now() -> datetime:
+    return datetime.now(LOCAL_TZ)
 
 
 def log(msg: str) -> None:
-    print(f"{datetime.now(LOCAL_TZ):%Y-%m-%d %H:%M:%S} {msg}", flush=True)
+    print(f"{_now():%Y-%m-%d %H:%M:%S} {msg}", flush=True)
+
+
+def _send_all(sink, payloads, label) -> RunResult:
+    """Send every payload; one failure is logged and counted, never fatal."""
+    result = RunResult()
+    for p in payloads:
+        try:
+            sink.send(p)
+            result.sent += 1
+        except Exception as exc:  # never log secrets: type and a short message only
+            result.failed += 1
+            log(f"{label}: send failed for {p.get('dedupe_key', '?')}: "
+                f"{type(exc).__name__}: {str(exc)[:200]}")
+    return result
 
 
 def make_sink(settings, name):
@@ -48,9 +79,9 @@ def run_suggest(settings, sink, areas, today):
     payloads = suggest(hotspots, events, orgs, today, areas=areas)
     log(f"suggest: {len(hotspots)} hotspots, {len(events)} upcoming events, "
         f"{len(orgs)} orgs -> {len(payloads)} suggestions")
-    for p in payloads:
-        sink.send(p)
-    return len(payloads)
+    result = _send_all(sink, payloads, "suggest")
+    log(f"suggest: sent {result.sent}, failed {result.failed}")
+    return result
 
 
 def run_brief(settings, sink, areas, today):
@@ -65,7 +96,7 @@ def run_brief(settings, sink, areas, today):
     finally:
         conn.close()
     llm = make_gemini(settings.gemini_api_key, settings.gemini_model) if settings.gemini_api_key else None
-    sent = 0
+    payloads = []
     for area in areas:
         area_hot = [h for h in hotspots if h["local_area"] == area]
         area_events = [e for e in events if e.get("local_area") == area]
@@ -73,10 +104,10 @@ def run_brief(settings, sink, areas, today):
                                  area_hot, today, llm)
         log(f"brief: {area}: {len(area_hot)} hotspots, {len(area_events)} events, "
             f"{len(track2[area])} open issues, model={payload['model']}")
-        sink.send(payload)
-        sent += 1
-    log(f"brief: {sent} briefings")
-    return sent
+        payloads.append(payload)
+    result = _send_all(sink, payloads, "brief")
+    log(f"brief: sent {result.sent}, failed {result.failed}")
+    return result
 
 
 def _next_run(now, hm, weekday=None):
@@ -89,21 +120,32 @@ def _next_run(now, hm, weekday=None):
 def run_loop(settings, sink, areas, today_override=None):
     schedule = {"suggest": (SUGGEST_AT, None), "brief": (BRIEF_AT, 0)}
     jobs = {"suggest": run_suggest, "brief": run_brief}
-    nxt = {n: _next_run(datetime.now(LOCAL_TZ), hm, wd) for n, (hm, wd) in schedule.items()}
+    nxt = {n: _next_run(_now(), hm, wd) for n, (hm, wd) in schedule.items()}
+    tries = {n: 0 for n in schedule}
     log(f"loop: next suggest {nxt['suggest']:%Y-%m-%d %H:%M}, "
         f"next brief {nxt['brief']:%Y-%m-%d %H:%M} (Vancouver)")
     while True:
         name = min(nxt, key=nxt.get)
-        wait = (nxt[name] - datetime.now(LOCAL_TZ)).total_seconds()
+        wait = (nxt[name] - _now()).total_seconds()
         if wait > 0:
             time.sleep(min(wait, 300))
             continue
+        tries[name] += 1
         try:
-            jobs[name](settings, sink, areas, today_override or datetime.now(LOCAL_TZ).date())
+            result = jobs[name](settings, sink, areas, today_override or _now().date())
+            ok = result is None or result.ok
         except Exception as exc:  # keep the loop alive; never log secrets
             log(f"loop: {name} failed: {type(exc).__name__}: {str(exc)[:200]}")
+            ok = False
+        if not ok and tries[name] < MAX_TRIES:
+            nxt[name] = _now() + RETRY_AFTER
+            log(f"loop: {name} will retry at {nxt[name]:%H:%M} (try {tries[name]} of {MAX_TRIES})")
+            continue
+        if not ok:
+            log(f"loop: {name} gave up after {MAX_TRIES} tries; waiting for the next slot")
+        tries[name] = 0
         hm, wd = schedule[name]
-        nxt[name] = _next_run(datetime.now(LOCAL_TZ), hm, wd)
+        nxt[name] = _next_run(_now(), hm, wd)
 
 
 def main(argv=None) -> int:
@@ -118,15 +160,16 @@ def main(argv=None) -> int:
     sink = make_sink(settings, args.sink or settings.sink)
     areas = [a.strip() for a in args.areas.split(",") if a.strip()] if args.areas else settings.areas
     override = date.fromisoformat(args.today) if args.today else None
-    today = override or datetime.now(LOCAL_TZ).date()
+    today = override or _now().date()
 
     if args.command == "loop":
         run_loop(settings, sink, areas, override)
+    failed = 0
     if args.command in ("suggest", "run-once"):
-        run_suggest(settings, sink, areas, today)
+        failed += run_suggest(settings, sink, areas, today).failed
     if args.command in ("brief", "run-once"):
-        run_brief(settings, sink, areas, today)
-    return 0
+        failed += run_brief(settings, sink, areas, today).failed
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

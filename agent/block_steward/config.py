@@ -12,7 +12,7 @@ def parse_env_file(path: Path) -> dict:
     values = {}
     if not path.is_file():
         return values
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
