@@ -1,17 +1,15 @@
 import type { AuthorKind } from '../types'
 
-// The badge next to an author's name. Residents get none; orgs and the agent are always labelled.
-export const AUTHOR_BADGES: Record<AuthorKind, { label: string; className: string } | null> = {
+// Shown after the author's name. Residents get nothing; orgs and the agent are always labelled.
+export const AUTHOR_BADGES: Record<AuthorKind, string | null> = {
   resident: null,
-  org: { label: 'Local org', className: 'kind-org' },
-  agent: { label: 'AI summary of City data', className: 'kind-agent' },
+  org: 'Local group',
+  agent: 'AI summary of City data',
 }
 
-export const TITLE_MAX = 120
-export const BODY_MAX = 2000
-export const REPLY_MAX = 1000
+export const COMMENT_MAX = 1000
 
-/** "just now", "12m ago", "3h ago", then "Nov 6". */
+// "just now", "12m ago", "3h ago", then "Nov 6"
 export function formatPosted(iso: string, now = Date.now()) {
   const minutes = Math.floor((now - new Date(iso).getTime()) / 60000)
   if (minutes < 1) return 'just now'

@@ -2,7 +2,7 @@ import { Check, LocateFixed, Search, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { CITIES, type City } from '../lib/geo'
 
-export type LocateStatus = 'idle' | 'locating' | 'found' | 'outside' | 'denied' | 'unavailable'
+export type LocateStatus = 'idle' | 'locating' | 'found' | 'outside' | 'denied' | 'unavailable' | 'insecure'
 
 interface Props {
   city: City
@@ -14,23 +14,29 @@ interface Props {
 
 const STATUS_TEXT: Record<LocateStatus, string | null> = {
   idle: null,
-  locating: 'Finding you…',
+  locating: null, // the button already says it
   found: "Using your location. 'Nearest' now sorts from where you are.",
   outside: "You're outside Vancouver. We only have Vancouver data so far, but distances are from where you are.",
   denied: 'Location is turned off. Allow it in your browser settings, or pick a city below.',
   unavailable: "Couldn't get your location. Pick a city below.",
+  // e.g. testing on a phone at http://192.168.x.x: browsers only give location over https
+  insecure: 'Location only works over https. Pick a city below.',
 }
 
 export default function LocationSheet({ city, status, onUseLocation, onPickCity, onClose }: Props) {
   const [query, setQuery] = useState('')
   const firstButton = useRef<HTMLButtonElement>(null)
 
-  // Focus the sheet when it opens, and close it with Escape.
+  // Focus the sheet when it opens, hand focus back to whatever opened it, close on Escape.
   useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null
     firstButton.current?.focus()
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      opener?.focus()
+    }
   }, [onClose])
 
   const q = query.trim().toLowerCase()
@@ -58,7 +64,7 @@ export default function LocationSheet({ city, status, onUseLocation, onPickCity,
           {status === 'locating' ? 'Finding you…' : 'Use my current location'}
         </button>
         {note && (
-          <p className={`sheet-note ${status === 'denied' || status === 'unavailable' ? 'warn' : ''}`} role="status">
+          <p className={`sheet-note ${status === 'denied' || status === 'unavailable' || status === 'insecure' ? 'warn' : ''}`} role="status">
             {note}
           </p>
         )}

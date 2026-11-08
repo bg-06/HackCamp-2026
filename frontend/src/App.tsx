@@ -1,32 +1,47 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import BottomNav from './components/BottomNav'
-import EventPage from './pages/EventPage'
-import ForumPage from './pages/ForumPage'
-import ForumThreadPage from './pages/ForumThreadPage'
 import HomePage from './pages/HomePage'
+import IssuePage from './pages/IssuePage'
 import PlaceholderPage from './pages/PlaceholderPage'
+import VolunteerPage from './pages/VolunteerPage'
+import FeedProvider from './state/FeedProvider'
+
+// Keyed by id: going from one card's page to another starts fresh, with nothing left over from the last one.
+function VolunteerRoute() {
+  const { id = '' } = useParams()
+  return <VolunteerPage key={id} />
+}
+function IssueRoute() {
+  const { id = '' } = useParams()
+  return <IssuePage key={id} />
+}
+
+// Old links (/events/:id, /fix) still work.
+function OldEventLink() {
+  const { id = '' } = useParams()
+  return <Navigate to={`/volunteer/${encodeURIComponent(id)}`} replace />
+}
 
 export default function App() {
   return (
-    <div className="app">
-      <Routes>
-        {/* "/" is the Events tab (Track 1), "/fix" is the Issues tab (Track 2). One route, so switching
-            tabs keeps the page (and your votes and RSVPs) instead of reloading it. */}
-        <Route path="/:tab?" element={<HomePage />} />
-        <Route path="/events/:id" element={<EventPage />} />
-        <Route path="/forum" element={<ForumPage />} />
-        <Route path="/forum/:id" element={<ForumThreadPage />} />
-        <Route
-          path="/map"
-          element={<PlaceholderPage title="Map" text="A map of 311 hotspots: green where neighbours can help, blue where only the City can fix it." />}
-        />
-        <Route
-          path="/me"
-          element={<PlaceholderPage title="Profile" text="Your RSVPs, past events, volunteer hours and votes will show up here." />}
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-      <BottomNav />
-    </div>
+    <FeedProvider>
+      <div className="app">
+        <Routes>
+          {/* "/" is Volunteer (Track 1), "/issues" is Issues (Track 2). Lists, location, sort and scroll live
+              in FeedProvider, so they survive opening a card and coming back. */}
+          <Route path="/:tab?" element={<HomePage />} />
+          <Route path="/volunteer/:id" element={<VolunteerRoute />} />
+          <Route path="/issues/:id" element={<IssueRoute />} />
+          <Route path="/events/:id" element={<OldEventLink />} />
+          <Route path="/fix" element={<Navigate to="/issues" replace />} />
+          <Route
+            path="/me"
+            element={<PlaceholderPage title="Profile" text="Where you've signed up to help, your volunteer hours and your votes will show up here." />}
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+        <BottomNav />
+      </div>
+    </FeedProvider>
   )
 }

@@ -6,22 +6,39 @@
 //
 // Mock mode is on by default. Set VITE_USE_MOCK=false in .env to use the real API.
 
-import { FORUM_POSTS, FORUM_REPLIES } from "../data/mockForum";
+import { COMMENTS } from "../data/mockComments";
 import { TRACK2_ISSUES, VOLUNTEER_EVENTS } from "../data/mockData";
-import type { ForumPost, ForumReply, Track2Issue, VolunteerEvent, Vote } from "../types";
+import type { Comment, CommentTarget, Track2Issue, VolunteerEvent, Vote } from "../types";
 
 export const USE_MOCK = import.meta.env.VITE_USE_MOCK !== "false";
 const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Give up after 15 s so a stuck request shows "Try again" instead of loading forever
+const TIMEOUT_MS = 15000;
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
     ...init,
+    // merged, so adding an Authorization header later doesn't drop the content type
+    headers: { "Content-Type": "application/json", ...init?.headers },
   });
   if (!res.ok) throw new Error(`Request failed (${res.status})`);
-  if (res.status === 204) return undefined as T;
+  // A 200/201 with an empty body is still a success (common for PUT and POST)
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
+/** Like request(), but a 404 means "doesn't exist" and returns null instead of throwing. */
+async function requestOrNull<T>(path: string): Promise<T | null> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Request failed (${res.status})`);
   return res.json() as Promise<T>;
 }
 
@@ -44,7 +61,7 @@ export async function getVolunteerEvent(id: string): Promise<VolunteerEvent | nu
     return e ? { ...e } : null;
   }
   // TODO(backend): GET /events/:id, 404 → null.
-  return request<VolunteerEvent>(`/events/${encodeURIComponent(id)}`);
+  return requestOrNull<VolunteerEvent>(`/events/${encodeURIComponent(id)}`);
 }
 
 /** Track 2: issues only the City can fix, with vote counts and the current user's vote. */
@@ -58,11 +75,22 @@ export async function getTrack2Issues(): Promise<Track2Issue[]> {
   return request<Track2Issue[]>("/issues");
 }
 
+/** One issue, or null if it doesn't exist (for example, the City closed it). */
+export async function getTrack2Issue(id: string): Promise<Track2Issue | null> {
+  if (USE_MOCK) {
+    await wait(150);
+    const i = TRACK2_ISSUES.find((x) => x.issue_id === id);
+    return i ? { ...i } : null;
+  }
+  // TODO(backend): GET /issues/:id, 404 → null.
+  return requestOrNull<Track2Issue>(`/issues/${encodeURIComponent(id)}`);
+}
+
 /** RSVP to an in-app event (kind "hotspot", or an org event with spots). Needs sign-in. */
 export async function setGoing(eventId: string, on: boolean): Promise<void> {
   if (USE_MOCK) {
     const e = VOLUNTEER_EVENTS.find((x) => x.id === eventId);
-    if (e) e.going = on; // kept until reload, so Home and the event page agree
+    if (e) e.going = on; // kept until reload, so the feed and the detail page agree
     return;
   }
   // TODO(backend): insert or delete the user's row in `rsvps`.
@@ -71,68 +99,37 @@ export async function setGoing(eventId: string, on: boolean): Promise<void> {
   });
 }
 
-// ---------- Forum ----------
+// ---------- Comments (the discussion under each post) ----------
 
 // Shown as the author in mock mode, until Auth0 sign-in gives us the real name.
 const MOCK_ME = { author: "You", authorKind: "resident" as const };
 
-/** All threads, newest first. The page filters by neighbourhood. */
-export async function getForumPosts(): Promise<ForumPost[]> {
-  if (USE_MOCK) {
-    await wait(300);
-    return [...FORUM_POSTS].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }
-  // TODO(backend): GET /forum/posts → forum_posts with a reply count, newest first.
-  return request<ForumPost[]>("/forum/posts");
-}
+const commentsPath = (type: CommentTarget, id: string) =>
+  `/${type === "event" ? "events" : "issues"}/${encodeURIComponent(id)}/comments`;
 
-/** One thread and its replies, oldest reply first. */
-export async function getForumThread(postId: string): Promise<{ post: ForumPost; replies: ForumReply[] } | null> {
+/** Comments on one volunteer opportunity or issue, oldest first. */
+export async function getComments(type: CommentTarget, id: string): Promise<Comment[]> {
   if (USE_MOCK) {
     await wait(200);
-    const post = FORUM_POSTS.find((p) => p.id === postId);
-    if (!post) return null;
-    const replies = FORUM_REPLIES.filter((r) => r.postId === postId).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-    return { post, replies };
+    return COMMENTS.filter((c) => c.targetType === type && c.targetId === id).sort(
+      (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt), // not string order: offsets differ
+    );
   }
-  // TODO(backend): GET /forum/posts/:id → { post, replies }, 404 → null.
-  return request<{ post: ForumPost; replies: ForumReply[] }>(`/forum/posts/${encodeURIComponent(postId)}`);
+  // TODO(backend): GET /events/:id/comments or /issues/:id/comments, from the `comments` table, oldest first.
+  return request<Comment[]>(commentsPath(type, id));
 }
 
-/** Start a thread as the signed-in resident. */
-export async function createForumPost(input: { localArea: string; title: string; body: string }): Promise<ForumPost> {
+/** Add a comment as the signed-in resident. */
+export async function addComment(type: CommentTarget, id: string, body: string): Promise<Comment> {
   if (USE_MOCK) {
     await wait(200);
-    const post: ForumPost = {
-      id: `local-${Date.now()}`,
-      ...input,
-      ...MOCK_ME,
-      createdAt: new Date().toISOString(),
-      replyCount: 0,
-      sample: false,
-    };
-    FORUM_POSTS.unshift(post);
-    return post;
+    const c: Comment = { id: `local-${COMMENTS.length}-${Date.now()}`, targetType: type, targetId: id, body, ...MOCK_ME, createdAt: new Date().toISOString() };
+    COMMENTS.push(c);
+    return c;
   }
-  // TODO(backend): POST /forum/posts. Needs sign-in; author comes from the session, never the request body.
-  return request<ForumPost>("/forum/posts", { method: "POST", body: JSON.stringify(input) });
-}
-
-/** Reply to a thread as the signed-in resident. */
-export async function createForumReply(postId: string, body: string): Promise<ForumReply> {
-  if (USE_MOCK) {
-    await wait(200);
-    const reply: ForumReply = { id: `local-${Date.now()}`, postId, body, ...MOCK_ME, createdAt: new Date().toISOString() };
-    FORUM_REPLIES.push(reply);
-    const post = FORUM_POSTS.find((p) => p.id === postId);
-    if (post) post.replyCount += 1;
-    return reply;
-  }
-  // TODO(backend): POST /forum/posts/:id/replies. Needs sign-in.
-  return request<ForumReply>(`/forum/posts/${encodeURIComponent(postId)}/replies`, {
-    method: "POST",
-    body: JSON.stringify({ body }),
-  });
+  // TODO(backend): POST /events/:id/comments or /issues/:id/comments with { body }.
+  // Needs sign-in. The author comes from the session, never from the request body.
+  return request<Comment>(commentsPath(type, id), { method: "POST", body: JSON.stringify({ body }) });
 }
 
 /** Up (1), down (-1) or clear (0) the current user's vote. One vote per user per issue. */

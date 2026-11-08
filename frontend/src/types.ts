@@ -14,7 +14,7 @@ export interface VolunteerEvent {
   title: string
   organiser: string
   category: string // same category names as the 311 data (see data/categories.ts)
-  startsAt: string // ISO with offset, e.g. 2026-11-15T10:00:00-08:00
+  startsAt: string // ISO with offset, e.g. 2026-11-15T10:00:00-07:00
   endsAt: string
   location: string
   localArea: string
@@ -52,6 +52,7 @@ export interface Track2Issue {
   lat?: number // centre of the H3 cell
   lng?: number
   popularity?: number // how many people searched for or opened it
+  photo_url?: string // a resident's photo of it; 311 data has none
 }
 
 export type Vote = -1 | 0 | 1
@@ -64,30 +65,20 @@ export interface LatLng {
   lng: number
 }
 
-// Forum: one board per neighbourhood. Stored in the app's Postgres (tables forum_posts, forum_replies).
-// resident = any signed-in person; org = posted by a verified org admin; agent = the Block Steward's weekly briefing.
+// Discussion under each post (a volunteer opportunity or an issue). Stored in the app's `comments` table
+// (plan.md section 6), keyed by what it's about.
+// resident = any signed-in person; org = a verified org admin; agent = the Block Steward.
 export type AuthorKind = 'resident' | 'org' | 'agent'
+export type CommentTarget = 'event' | 'issue'
 
-export interface ForumPost {
+export interface Comment {
   id: string
-  localArea: string
-  title: string
+  targetType: CommentTarget
+  targetId: string // VolunteerEvent.id or Track2Issue.issue_id
   body: string // plain text, never HTML
   author: string // display name: first name + last initial, or the org's name
   authorKind: AuthorKind
   createdAt: string // ISO
-  replyCount: number
-  linkedEventId?: string // a VolunteerEvent this post is about
-  sample: boolean
 }
 
-export interface ForumReply {
-  id: string
-  postId: string
-  body: string
-  author: string
-  authorKind: AuthorKind
-  createdAt: string
-}
-
-export type FeedTab = 'help' | 'fix'
+export type FeedTab = 'volunteer' | 'issues'
