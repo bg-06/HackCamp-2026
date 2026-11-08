@@ -290,6 +290,13 @@ export default function HomePage() {
           )}
         </section>
 
+        {/* Prototype: "Ways to help" leads, with the recurring-spot carousel folded in
+            underneath it (Instagram-threads style) so planning is reachable without
+            scrolling past the whole page first. */}
+        {tab === "volunteer" && (openHotspots.length > 0 || shownEvents.length > 0) && (
+          <h2 className="feed-heading" id="ways-to-help-heading">Ways to help</h2>
+        )}
+
         {tab === "volunteer" && openHotspots.length > 0 && (
           <section className="needs-help" aria-labelledby="needs-help-heading">
             <div className="needs-help-head">
@@ -373,20 +380,17 @@ export default function HomePage() {
         )}
 
         {tab === "volunteer" && shownEvents.length > 0 && (
-          <>
-            {openHotspots.length > 0 && <h2 className="feed-heading">Ways to help</h2>}
-            <MasonryFeed
-              label="Ways to volunteer"
-              items={shownEvents.map((e) => {
-                const ratio = coverRatio(e.id, Boolean(e.photoUrl));
-                return {
-                  key: e.id,
-                  ratio,
-                  node: <EventTile event={e} ratio={ratio} distanceKm={here ? distanceTo(here, e) : undefined} />,
-                };
-              })}
-            />
-          </>
+          <MasonryFeed
+            label="Ways to volunteer"
+            items={shownEvents.map((e) => {
+              const ratio = coverRatio(e.id, Boolean(e.photoUrl));
+              return {
+                key: e.id,
+                ratio,
+                node: <EventTile event={e} ratio={ratio} distanceKm={here ? distanceTo(here, e) : undefined} />,
+              };
+            })}
+          />
         )}
 
         {tab === "issues" && issues.items && shownIssues.length === 0 && (

@@ -1049,6 +1049,13 @@ a.tile:hover h3,
   padding: 0 14px 6px;
 }
 .needs-help-head .muted { margin: 0; }
+/* Prototype: folded under "Ways to help", so this reads as a rail label rather than a second page heading. */
+.needs-help-head h2 {
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
 .help-strip {
   display: flex;
   gap: 8px;
