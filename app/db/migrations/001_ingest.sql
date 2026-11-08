@@ -1,8 +1,6 @@
-CREATE EXTENSION IF NOT EXISTS postgis;
 
 CREATE TABLE IF NOT EXISTS ingest_state (
     dataset_id text PRIMARY KEY,
-    cursor_value timestamptz,
     last_started_at timestamptz,
     last_succeeded_at timestamptz,
     last_error text,
@@ -10,31 +8,56 @@ CREATE TABLE IF NOT EXISTS ingest_state (
     source_processed_at timestamptz
 );
 
--- Append-only landing table for Databricks federation. Vancouver exposes no case ID.
+-- Exact Lakehouse Federation contract consumed by the Databricks pipeline.
+-- Append-only: updated City records are inserted again with a newer timestamp.
 CREATE TABLE IF NOT EXISTS raw_311_requests (
-    ingest_id bigserial PRIMARY KEY,
-    source_hash text NOT NULL,
-    department text NOT NULL,
-    service_request_type text NOT NULL,
-    status text NOT NULL,
+    id bigserial PRIMARY KEY,
+    department text,
+    service_request_type text,
+    status text,
     closure_reason text,
-    service_request_open_timestamp timestamptz NOT NULL,
+    service_request_open_timestamp timestamptz,
     service_request_close_date date,
-    last_modified_timestamp timestamptz NOT NULL,
+    last_modified_timestamp timestamptz,
     address text,
     local_area text,
     channel text,
     latitude double precision,
     longitude double precision,
-    geom geometry(Point, 4326),
-    source_record jsonb NOT NULL,
-    ingested_at timestamptz NOT NULL DEFAULT now(),
-    UNIQUE (source_hash, last_modified_timestamp)
+    fetched_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS raw_311_modified_idx ON raw_311_requests (last_modified_timestamp DESC);
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'raw_311_requests'
+          AND column_name IN ('ingest_id', 'source_hash', 'source_record', 'ingested_at')
+    ) THEN
+        RAISE EXCEPTION 'raw_311_requests uses the obsolete ingest schema; drop it before applying this migration';
+    END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS raw_311_modified_idx ON raw_311_requests (last_modified_timestamp);
 CREATE INDEX IF NOT EXISTS raw_311_type_idx ON raw_311_requests (service_request_type);
-CREATE INDEX IF NOT EXISTS raw_311_geom_gix ON raw_311_requests USING gist (geom);
+
+-- Minimum app-side contracts read by Databricks rankings and event impact jobs.
+CREATE TABLE IF NOT EXISTS votes (
+    issue_id text NOT NULL,
+    value smallint NOT NULL CHECK (value IN (-1, 1))
+);
+
+CREATE INDEX IF NOT EXISTS votes_issue_idx ON votes (issue_id);
+
+CREATE TABLE IF NOT EXISTS events (
+    id text PRIMARY KEY,
+    h3_r9 text,
+    category text,
+    done_at timestamptz
+);
+
+CREATE INDEX IF NOT EXISTS events_done_idx ON events (done_at) WHERE done_at IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS road_projects (
     source_key text PRIMARY KEY,
@@ -45,48 +68,22 @@ CREATE TABLE IF NOT EXISTS road_projects (
     location text,
     completion_date date,
     url_link text,
-    geom geometry(Geometry, 4326),
-    representative_point geometry(Point, 4326),
+    geom jsonb,
+    representative_point jsonb,
     source_record jsonb NOT NULL,
     ingested_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS road_projects_geom_gix ON road_projects USING gist (geom);
-CREATE INDEX IF NOT EXISTS road_projects_point_gix ON road_projects USING gist (representative_point);
+CREATE INDEX IF NOT EXISTS road_projects_dataset_idx ON road_projects (dataset_id, project_status);
 
 CREATE TABLE IF NOT EXISTS local_areas (
     name text PRIMARY KEY,
-    geom geometry(MultiPolygon, 4326) NOT NULL,
-    representative_point geometry(Point, 4326),
+    geom jsonb NOT NULL,
+    representative_point jsonb,
     source_record jsonb NOT NULL,
     ingested_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS local_areas_geom_gix ON local_areas USING gist (geom);
 
-CREATE OR REPLACE VIEW raw_311_current AS
-SELECT DISTINCT ON (source_hash) *
-FROM raw_311_requests
-ORDER BY source_hash, last_modified_timestamp DESC, ingest_id DESC;
 
-CREATE OR REPLACE VIEW volunteer_source_tasks AS
-SELECT r.*, COALESCE(r.local_area, a.name) AS resolved_local_area
-FROM raw_311_current r
-LEFT JOIN LATERAL (
-    SELECT name FROM local_areas
-    WHERE r.geom IS NOT NULL AND ST_Covers(geom, r.geom)
-    LIMIT 1
-) a ON true
-WHERE r.status = 'Open'
-  AND r.geom IS NOT NULL
-  AND r.service_request_type IN (
-      'Street Cleaning and Debris Pick Up Case',
-      'Street Surface Water Flooding Case',
-      'City and Park Trees Maintenance Case',
-      'Urban Issues in Parks Case',
-      'Park Facility Maintenance Request',
-      'Parks Operations and Maintenance Case',
-      'Park Litter Can Case',
-      'Graffiti Removal - Park Property Case',
-      'Park Drinking Fountain Maintenance Request'
-  );
+
