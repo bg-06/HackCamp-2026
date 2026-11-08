@@ -14,8 +14,12 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.icon-button.plain:hover {
+.icon-button.plain {
   background: var(--surface-muted);
+}
+.icon-button.plain:hover,
+.icon-button.plain:focus-visible {
+  color: var(--blue-dark);
   opacity: 1;
 }
 .profile-hero {
@@ -60,9 +64,14 @@
   font-size: 1.05rem;
   font-weight: 700;
 }
+.page.place {
+  background: var(--chrome); /* profile reads as a plain page, not a card feed */
+}
 .page.place .stats {
   margin: 22px 0 18px;
   border: none;
+  background: transparent;
+  box-shadow: none;
 }
 .page.place .stats > div {
   align-items: center;
