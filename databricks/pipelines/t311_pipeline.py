@@ -26,21 +26,44 @@ BRONZE = "bbb.bronze.t311_raw"
 SILVER = "bbb.silver.t311_cases"
 CURRENT = "bbb.silver.t311_cases_current"
 
-# Columns of raw_311_requests as created by app/db/migrations/001_ingest.sql (TypeScript ingest).
-# `geom` (PostGIS) and `source_record` (jsonb) are left out: lat/lon carry the same data, and
-# federation doesn't need to map those types.
-RAW_COLS = [
-    "ingest_id", "source_hash", "department", "service_request_type", "status", "closure_reason",
+CITY_COLS = [
+    "department", "service_request_type", "status", "closure_reason",
     "service_request_open_timestamp", "service_request_close_date", "last_modified_timestamp",
-    "address", "local_area", "channel", "latitude", "longitude", "ingested_at",
+    "address", "local_area", "channel", "latitude", "longitude",
+]
+# Identity fields for a case (no public case ID exists). Same fields as the TS ingest's source_hash.
+IDENTITY_COLS = [
+    "department", "service_request_type", "service_request_open_timestamp",
+    "address", "local_area", "channel", "latitude", "longitude",
 ]
 
 
+def _first(cols, *names):
+    return next((n for n in names if n in cols), None)
+
+
 # ---------------------------------------------------------------- Bronze
+# raw_311_requests has had two layouts: (id, fetched_at) from plan.md 5.2, and
+# (ingest_id, source_hash, ingested_at) from app/db/migrations/001_ingest.sql. Accept either and
+# normalise to (id, source_hash, <City fields>, loaded_at). geom / source_record are never read:
+# lat/lon carry the same data.
 @dp.table(name=BRONZE, comment="311 service requests as landed in Postgres (raw_311_requests)")
-@dp.expect("has_source_hash", "source_hash IS NOT NULL")
+@dp.expect("has_postgres_id", "id IS NOT NULL")
 def t311_raw():
-    return spark.read.table(RAW_SOURCE).select(*RAW_COLS)
+    src = spark.read.table(RAW_SOURCE)
+    cols = set(src.columns)
+    id_col = _first(cols, "ingest_id", "id")
+    loaded_col = _first(cols, "ingested_at", "fetched_at")
+    if "source_hash" in cols:
+        source_hash = F.col("source_hash")
+    else:
+        source_hash = F.sha2(F.concat_ws("|", *[F.coalesce(F.col(c).cast("string"), F.lit("")) for c in IDENTITY_COLS]), 256)
+    return src.select(
+        F.col(id_col).cast("bigint").alias("id"),
+        source_hash.alias("source_hash"),
+        *CITY_COLS,
+        (F.col(loaded_col) if loaded_col else F.lit(None).cast("timestamp")).alias("loaded_at"),
+    )
 
 
 # ---------------------------------------------------------------- Silver
@@ -50,11 +73,9 @@ def t311_raw():
 # Only judged on geocoded rows; ungeocoded ones are already counted by has_location.
 @dp.expect("in_vancouver", "latitude IS NULL OR (latitude BETWEEN 49.19 AND 49.32 AND longitude BETWEEN -123.27 AND -123.02)")
 def t311_cases():
-    # case_key = the ingest's source_hash: sha256 of department, type, open time, address, area,
-    # channel, lat, lon (no public case ID exists; ~1% of rows collide and merge in CURRENT).
-    # Using it means Databricks and Postgres' raw_311_current agree on what one case is.
+    # case_key = source_hash (sha256 of the identity fields). ~1% of rows collide and merge in CURRENT.
     return spark.read.table(BRONZE).select(
-        F.col("ingest_id").alias("id"),
+        "id",
         F.col("source_hash").alias("case_key"),
         "department",
         F.col("service_request_type").alias("request_type"),
