@@ -24,11 +24,13 @@ Apply `app/db/migrations/004_volunteer_raw.sql` before running the command; it o
 
 ### Green Teams of Canada official site
 
-The official WordPress REST endpoint provides public activity posts. The adapter currently lands the newest 100 posts as `completed_activity` records. These are useful to Databricks for organizer history, activity classification, locations and impact examples, but they are not upcoming signups.
+The official WordPress REST endpoint provides public activity posts. The adapter lands the newest 100 posts as `completed_activity` records. These are useful to Databricks for organizer history, activity classification, locations and impact examples, but they are not upcoming signups.
+
+The official Lower Mainland Green Team page is also validated on every refresh. Its public “JOIN Our Green Team” CTA becomes an ongoing opportunity in `events`, linking to the organisation's Meetup signup page. The card image comes from Green Teams Canada's own public WordPress media.
 
 ### Lower Mainland Green Team Meetup
 
-The adapter reads only the public group events HTML and schema.org JSON-LD. It does not call Meetup's disallowed `/api`, `/gql`, RSS, Atom, or internal Next.js endpoints. As of 2026-11-08, the public page reports zero upcoming events, so zero Meetup rows is expected.
+The reusable parser can read public schema.org event JSON-LD without calling Meetup's private `/api`, `/gql`, RSS, Atom, or internal Next.js endpoints. Meetup's current public group page no longer exposes stable event metadata, so it is not an active ingestion source; the official Green Teams Canada signup opportunity remains available instead.
 
 ## Data policy
 
