@@ -30,7 +30,7 @@ The big picture is in [plan.md](../plan.md). Read plan.md section 0 ("Product di
 | `app/` | TypeScript ingest by a teammate: `scripts/ingest.ts`, `scripts/migrate.ts`, `lib/db.ts`, `db/migrations/001_ingest.sql`. It loads Vancouver open data into Postgres |
 | Postgres tables | `raw_311_requests` (311 data; loading is in progress), `road_projects`, `local_areas`, `ingest_state`, `events` (empty, 4 columns), `votes` (empty, 2 columns) |
 | `frontend/` | Not on `main` yet. It's on branch `origin/frontend-mock`: a Vite + React app with a home feed that uses mock data. Its `src/api/client.ts` already calls `GET /issues`, `GET /events`, `POST/DELETE /issues/:id/me-too` and `POST/DELETE /events/:id/going` |
-| `databricks/` | Done and deployed. Builds the `gold` tables. Publishing them to Postgres (`publish_gold`) is blocked until step 15 |
+| `databricks/` | Done and deployed. Builds the `gold` tables and copies the ones the app needs into Postgres `gold_*` tables (`publish_gold`, part of the `bbb_daily` job) |
 | API, Auth0, agent, n8n | Not started |
 
 **Decisions already made (don't revisit):**
@@ -184,7 +184,9 @@ The big picture is in [plan.md](../plan.md). Read plan.md section 0 ("Product di
 
 ## Step 7: Add test data for the gold tables (development only)
 
-**Why:** the `gold_*` tables stay empty until Databricks can publish (step 15). The frontend needs something to show before then. This adds 4 fake Track 2 issues, 3 help hotspots, 7 map cells and 2 area summaries in real Vancouver locations. The first real publish replaces them automatically.
+**Skip this step if the gold tables already have real data:** run `python docs/next-steps/check_db.py`; if `gold_track2_issues` has rows, Databricks has already published and you don't need fake data. Go to step 8 (its checks then show real issues instead of the 4 test ones).
+
+**Why:** until Databricks publishes, the `gold_*` tables are empty, and the frontend needs something to show. This adds 4 fake Track 2 issues, 3 help hotspots, 7 map cells and 2 area summaries in real Vancouver locations. The first real publish replaces them automatically.
 
 - **Who:** anyone
 - **Branch:** `step-7-gold-fixtures`
@@ -378,13 +380,12 @@ Plan.md section 7 has the later Auth0 work: roles (`org_admin`, `moderator`) and
 ## Step 15: Finish the Databricks side
 
 - **Who:** Roshan (Databricks owner). Not for anyone else.
-- **Before you start:** the Postgres server's CA certificate is available (the server uses a self-signed certificate), and step 3 is done.
+- **Before you start:** step 3 is done (all 311 data loaded) and step 5 is merged.
 - **Do:**
-  1. Store the certificate as Databricks secret `bbb/pg_ca_cert`.
-  2. Switch `databricks/notebooks/publish_gold.py` from `psycopg` (it crashes on Databricks serverless) to `pg8000`, with an SSL context that trusts that certificate.
-  3. Remove table creation from `publish_gold.py`, since step 5 made the ingest create the `gold_*` tables.
-  4. Run `bbb_daily`; check the `gold_*` tables in Postgres hold real data (this replaces the step 7 fixtures); unpause the schedule.
-  5. Re-check the Track 1 request types against real data, and build the AI/BI dashboard and Genie space (plan.md section 5.9).
+  1. Remove the table creation from `databricks/notebooks/publish_gold.py` (the `DDL_PATH` part), since step 5 made the ingest create the `gold_*` tables.
+  2. Run `bbb_daily` (`cd databricks && databricks bundle run bbb_daily`) and check the `gold_*` tables in Postgres hold data for all of Vancouver.
+  3. Unpause the `bbb_daily` schedule.
+  4. Re-check the Track 1 request types against the full data, and build the AI/BI dashboard and Genie space (plan.md section 5.9).
 
 ---
 
