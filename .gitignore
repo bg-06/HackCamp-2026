@@ -1,2 +1,14 @@
-data/raw/
 __pycache__/
+.venv/
+node_modules/
+.npm-cache/
+.next/
+dist/
+.databricks/
+
+# Local secrets (Postgres connection etc.). Copy env.example to env (or .env) and fill it in.
+env
+.env
+.env.*
+!env.example
+!.env.example

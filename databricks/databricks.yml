@@ -1,0 +1,77 @@
+bundle:
+  name: block-by-block
+
+workspace:
+  host: https://dbc-7f6625ff-1e9b.cloud.databricks.com
+
+# Before the first deploy: python databricks/setup/setup_postgres.py
+# (secret scope `bbb`, connection `bbb_pg`, foreign catalog `bbb_app`, bbb.gold.track_overrides).
+
+variables:
+  summary_endpoint:
+    description: Foundation model endpoint for area summaries (see the Serving page)
+    default: databricks-meta-llama-3-3-70b-instruct
+
+resources:
+  pipelines:
+    t311_pipeline:
+      name: t311_pipeline
+      catalog: bbb
+      schema: bronze
+      serverless: true
+      channel: CURRENT
+      configuration:
+        bbb.raw_311_source: bbb_app.public.raw_311_requests
+      libraries:
+        - file:
+            path: ./pipelines/t311_pipeline.py
+        - file:
+            path: ./sql/gold_views.sql
+
+  jobs:
+    # Daily: Postgres -> bronze/silver/gold -> rankings -> summaries -> back to Postgres.
+    # The 311 fetch into Postgres (teammate) runs before this; add it as the first task when it exists.
+    bbb_daily:
+      name: bbb_daily
+      schedule:
+        quartz_cron_expression: "0 0 6 * * ?"   # 06:00 Vancouver, after the portal's nightly refresh
+        timezone_id: America/Vancouver
+        pause_status: PAUSED                     # unpause after the first good manual run
+      max_concurrent_runs: 1
+      tasks:
+        - task_key: pipeline_refresh
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.t311_pipeline.id}
+        - task_key: refresh_rankings
+          depends_on: [{ task_key: pipeline_refresh }]
+          notebook_task:
+            notebook_path: ./notebooks/refresh_rankings.py
+        - task_key: area_summaries
+          depends_on: [{ task_key: refresh_rankings }]
+          notebook_task:
+            notebook_path: ./notebooks/area_summaries.py
+            base_parameters:
+              endpoint: ${var.summary_endpoint}
+              force: "false"
+        - task_key: publish_gold
+          depends_on: [{ task_key: area_summaries }]
+          notebook_task:
+            notebook_path: ./notebooks/publish_gold.py
+
+    # Fast path for n8n (event marked done, votes changed) and nightly: no pipeline run.
+    bbb_refresh_rankings:
+      name: bbb_refresh_rankings
+      max_concurrent_runs: 1
+      tasks:
+        - task_key: refresh_rankings
+          notebook_task:
+            notebook_path: ./notebooks/refresh_rankings.py
+        - task_key: publish_gold
+          depends_on: [{ task_key: refresh_rankings }]
+          notebook_task:
+            notebook_path: ./notebooks/publish_gold.py
+
+targets:
+  dev:
+    default: true
+    mode: development
