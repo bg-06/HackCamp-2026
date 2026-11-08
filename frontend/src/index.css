@@ -1,95 +1,57 @@
-/* Block by Block styles (UI suggestion).
-   One theme for the whole app, in light and dark. Light is the default; dark follows the
-   system setting unless the person picks one (html[data-theme="light" | "dark"]).
-   One accent (the original blue) in both. Text colours below are all at least 4.5:1 on the surfaces they sit on. */
+/* Block by Block styles. Dark, image-led feed with a single blue interaction accent. */
 
 :root {
-  /* Light */
-  --bg: #ffffff;
-  --surface: #ffffff; /* cards, sheets, bars */
-  --surface-muted: #f1f2f4; /* pills, inputs, skeletons */
-  --surface-raised: #f7f8f9; /* the feed sits on this so white cards stand off it */
-  --border: #e2e4e7;
-  --border-strong: #8a8f97; /* outlined buttons, 3:1 */
-  --text: #111214;
-  --text-muted: #646973; /* 5.4:1 on white, 4.9:1 on surface-muted */
-  --accent: #2563eb; /* fills: white text on it is 5.2:1 */
-  --accent-text: #2563eb; /* links and accent text on the page: 5.2:1 (4.6:1 on grey pills) */
-  --accent-soft: #e8f0fe;
-  --on-accent: #ffffff;
-  --good: #1f7a45;
-  --warning: #a8500f;
-  --nav-bg: #ffffff;
-  --title-glow: rgb(255 255 255 / 92%);
-  --cover-shade: transparent;
-  color-scheme: light;
+  --blue: #3b82f6;
+  --blue-dark: #60a5fa;
+  --blue-light: #172554;
+  --green: var(--blue);
+  --green-dark: var(--blue);
+  --green-light: var(--blue-light);
+  --navy: var(--blue);
+  --navy-light: var(--blue-light);
 
-  /* The base styles still use the old names */
-  --blue: var(--accent);
-  --blue-dark: var(--accent-text);
-  --blue-light: var(--accent-soft);
-  --green: var(--accent);
-  --green-dark: var(--accent);
-  --green-light: var(--accent-soft);
-  --navy: var(--accent);
-  --navy-light: var(--accent-soft);
-  --red: var(--accent);
-  --teal: var(--accent-text);
-  --track1: var(--accent);
-  --track1-light: var(--accent-soft);
-  --track2: var(--accent);
-  --track2-light: var(--accent-soft);
+  --bg: #111114;
+  --surface: #1c1c20;
+  --surface-muted: #26262b;
+  --border: #303036;
+  --text: #f4f4f5;
+  --text-muted: #a5a5ad;
+  --warning: #f0a35e;
 
-  --radius: 10px;
-  --nav-h: 68px;
-  --serif: "Playfair Display", Georgia, "Times New Roman", serif;
+  --track1: var(--blue);
+  --track1-light: var(--blue-light);
+  --track2: var(--blue);
+  --track2-light: var(--blue-light);
+
+  --radius: 8px;
+  --nav-h: 60px;
 
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
   background: var(--bg);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #111112;
-    --surface: #1c1c1e;
-    --surface-muted: #2a2a2d;
-    --surface-raised: #111112;
-    --border: #2c2c2f;
-    --border-strong: #6b6b72;
-    --text: #f2f2f3;
-    --text-muted: #a1a1a9; /* 6.6:1 on cards */
-    --accent: #2563eb; /* white text on it: 5.2:1 */
-    --accent-text: #60a5fa; /* 6.7:1 on cards */
-    --accent-soft: #172554;
-    --on-accent: #ffffff;
-    --good: #4ade80;
-    --warning: #f0a35e;
-    --nav-bg: #111112;
-    --title-glow: rgb(17 17 18 / 92%);
-    --cover-shade: rgb(17 17 18 / 58%);
-    color-scheme: dark;
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #ffffff; --surface: #ffffff; --surface-muted: #f1f2f4;
+    --border: #d7dbe0; --text: #111214; --text-muted: #595f69;
+    --blue: #2563eb; --blue-dark: #1d4ed8; --blue-light: #e8f0fe;
+    --warning: #a8500f;
+    color-scheme: light;
   }
 }
-:root[data-theme="dark"] {
-  --bg: #111112;
-  --surface: #1c1c1e;
-  --surface-muted: #2a2a2d;
-  --surface-raised: #111112;
-  --border: #2c2c2f;
-  --border-strong: #6b6b72;
-  --text: #f2f2f3;
-  --text-muted: #a1a1a9;
-  --accent: #2563eb;
-  --accent-text: #60a5fa;
-  --accent-soft: #172554;
-  --on-accent: #ffffff;
-  --good: #4ade80;
-  --warning: #f0a35e;
-  --nav-bg: #111112;
-  --title-glow: rgb(17 17 18 / 92%);
-  --cover-shade: rgb(17 17 18 / 58%);
-  color-scheme: dark;
+:root[data-theme="light"] {
+  --bg: #ffffff; --surface: #ffffff; --surface-muted: #f1f2f4;
+  --border: #d7dbe0; --text: #111214; --text-muted: #595f69;
+  --blue: #2563eb; --blue-dark: #1d4ed8; --blue-light: #e8f0fe;
+  --warning: #a8500f;
+  color-scheme: light;
+}
+:root[data-theme="dark"] { color-scheme: dark; }
+.chip-button[aria-pressed="true"] {
+  border-color: var(--blue);
+  background: var(--blue-light);
+  color: var(--blue-dark);
 }
 
 * {
@@ -517,7 +479,7 @@ a.tile:hover h3,
 .vote-button.up.on {
   border-color: var(--track2);
   background: var(--track2);
-  color: var(--on-accent);
+  color: #fff;
 }
 .vote-button:disabled {
   cursor: not-allowed;
@@ -615,6 +577,12 @@ a.tile:hover h3,
   background: var(--surface-muted);
   overflow: hidden;
 }
+.place-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
 
 /* ---------- Buttons ---------- */
 .card-action {
@@ -634,7 +602,7 @@ a.tile:hover h3,
   border: 1px solid var(--track1);
   border-radius: var(--radius);
   background: var(--track1);
-  color: var(--on-accent);
+  color: #fff;
   font-weight: 600;
 }
 .action-button.on {
@@ -727,18 +695,17 @@ a.tile:hover h3,
   gap: 6px;
   margin: 0 0 8px;
   padding: 8px 10px;
-  border: 1px solid #e0b100;
-  border-left-width: 4px;
+  border: 1px solid #936d2f;
   border-radius: var(--radius);
-  background: #fff6d6;
-  color: #5c4300;
+  background: #302719;
+  color: #ffe2a6;
   font-size: 0.85rem;
   font-weight: 600;
 }
 .form-error svg {
   flex-shrink: 0;
   margin-top: 1px;
-  color: #8a6400;
+  color: #ffe2a6;
 }
 
 /* ---------- States ---------- */

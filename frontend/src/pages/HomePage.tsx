@@ -1,4 +1,4 @@
-import { LocateFixed, TriangleAlert } from "lucide-react";
+import { ChevronDown, LocateFixed, TriangleAlert } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { USE_MOCK } from "../api/client";
@@ -50,6 +50,7 @@ export default function HomePage() {
     requireSignIn,
   } = useFeed();
   const [sortOpen, setSortOpen] = useState(false);
+  const [showAllHotspots, setShowAllHotspots] = useState(false);
   const contentRef = useRef<HTMLElement>(null);
 
   // Back from a card: put the list where it was
@@ -135,6 +136,7 @@ export default function HomePage() {
   const openHotspots = (hotspots.items ?? [])
     .filter((h) => !planned.has(h.id))
     .sort((a, b) => (here ? (distanceTo(here, a) ?? Infinity) - (distanceTo(here, b) ?? Infinity) : b.times_reported - a.times_reported));
+  const hotspotsShown = showAllHotspots ? openHotspots : openHotspots.slice(0, 3);
   const sampleCount = (events.items ?? []).filter((e) => e.sample).length;
 
   function pickSort(key: SortKey) {
@@ -176,30 +178,31 @@ export default function HomePage() {
   }
 
   const locationNote = LOCATION_NOTES[locStatus];
+  const sortLabel = sorts.find((s) => s.key === sort)?.label ?? "For you";
 
   return (
     <div className="page">
       <header className={`home-header track-${tab}`}>
-        <TopBar
-          tab={tab}
-          searchOpen={searchOpen[tab]}
-          onToggleSearch={toggleSearch}
-          menuOpen={sortOpen}
-          onToggleMenu={() => setSortOpen(!sortOpen)}
-        />
+        <TopBar title={tab === "volunteer" ? "Volunteer" : "Issues"} searchOpen={searchOpen[tab]} onToggleSearch={toggleSearch} />
+
+        <div className="control-row">
+          <button
+            className={`control-pill ${here ? "on" : ""}`}
+            aria-pressed={Boolean(here)}
+            onClick={toggleNearMe}
+            disabled={locStatus === "locating"}
+          >
+            <LocateFixed size={16} aria-hidden="true" />
+            Near me
+          </button>
+          <button className="control-pill" aria-expanded={sortOpen} onClick={() => setSortOpen(!sortOpen)}>
+            Sort: {sortLabel}
+            <ChevronDown size={16} aria-hidden="true" />
+          </button>
+        </div>
 
         {sortOpen && (
           <div className="filter-row" role="group" aria-label="Sort by">
-            <button
-              className={`filter-chip ${here ? "selected" : ""}`}
-              aria-pressed={Boolean(here)}
-              onClick={toggleNearMe}
-              disabled={locStatus === "locating"}
-            >
-              <LocateFixed size={14} aria-hidden="true" />
-              Near me
-            </button>
-            <span className="filter-divider" aria-hidden="true" />
             {sorts.map((s) => (
               <button
                 key={s.key}
@@ -272,31 +275,30 @@ export default function HomePage() {
         )}
 
         {tab === "volunteer" && openHotspots.length > 0 && (
-          // One swipeable row of small cards, so the feed starts right under it instead of a screen down.
           <section className="needs-help" aria-labelledby="needs-help-heading">
-            <div className="needs-help-head">
-              <h2 id="needs-help-heading">Needs help</h2>
-              <p className="muted small">
-                {openHotspots.length} reported spots, nothing planned
-              </p>
-            </div>
-            <ul className="help-strip">
-              {openHotspots.map((h) => (
-                <li key={h.id} className="help-card">
-                  <span className="help-card-top">
-                    <span className="help-count">Reported {h.times_reported}×</span>
-                    {here && h.lat !== undefined && <span className="muted small">{formatKm(distanceTo(here, h)!)}</span>}
+            <h2 id="needs-help-heading">Needs help</h2>
+            <p className="muted small">Spots that keep getting reported, with nothing planned yet.</p>
+            <ul className="plain-list">
+              {hotspotsShown.map((h) => (
+                <li key={h.id} className="help-row">
+                  <span>
+                    <span className="row-title">{requestTypeInSentence(h.request_type)}</span>
+                    <span className="muted small">
+                      {h.near ?? h.local_area} · reported {h.times_reported}× in {h.months_seen} months
+                      {here && h.lat !== undefined && ` · ${formatKm(distanceTo(here, h)!)}`}
+                    </span>
                   </span>
-                  <span className="row-title">{requestTypeInSentence(h.request_type)}</span>
-                  <span className="muted small">
-                    {h.near ?? h.local_area} · {h.months_seen} months
-                  </span>
-                  <Link className="help-start" to={`/volunteer/new?hotspot=${encodeURIComponent(h.id)}`}>
+                  <Link className="chip-button" to={`/volunteer/new?hotspot=${encodeURIComponent(h.id)}`}>
                     Start one
                   </Link>
                 </li>
               ))}
             </ul>
+            {openHotspots.length > 3 && (
+              <button className="link-button small" onClick={() => setShowAllHotspots(!showAllHotspots)}>
+                {showAllHotspots ? "Show fewer" : `Show all ${openHotspots.length}`}
+              </button>
+            )}
           </section>
         )}
 

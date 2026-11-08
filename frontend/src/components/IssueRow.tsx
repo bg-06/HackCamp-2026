@@ -14,7 +14,6 @@ interface Props {
 
 export default function IssueRow({ issue, rank, distanceKm, onVote }: Props) {
   const style = categoryStyle(issue.category)
-  const Icon = style.icon
   const meta = [`Open ${issue.days_open} ${issue.days_open === 1 ? 'day' : 'days'}`, distanceKm !== undefined ? formatKm(distanceKm) : null]
     .filter(Boolean)
     .join(' · ')
@@ -25,7 +24,7 @@ export default function IssueRow({ issue, rank, distanceKm, onVote }: Props) {
         <span className="issue-rank">{rank}</span>
         {/* Same size with or without a photo, so the rows line up */}
         <div className="issue-thumb">
-          {issue.photo_url ? <img src={issue.photo_url} alt="" loading="lazy" /> : <Icon size={24} strokeWidth={1.5} aria-hidden="true" />}
+          <img src={issue.photo_url || '/issue-placeholder.png'} alt="" loading="lazy" />
         </div>
         <div className="issue-row-text">
           <p className="eyebrow">{style.label}</p>

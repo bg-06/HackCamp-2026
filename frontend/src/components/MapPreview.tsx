@@ -3,27 +3,22 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import { useEffect, useRef, type ReactElement } from 'react'
 import { useIsDark } from '../lib/theme'
 
-// CARTO basemaps: no API key, a matched light (Voyager) and dark (Dark Matter) pair built for app backgrounds.
-// Free for non-commercial use up to 75k map views a month; the styles carry their own OSM/CARTO credit.
-// Fully free fallback with no limits, same idea: VersaTiles
-//   https://tiles.versatiles.org/assets/styles/colorful/style.json and .../colorful-dark/style.json
+// Match the map to the selected appearance.
 const STYLES = {
   light: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
   dark: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
 }
-const PIN = { light: '#2563eb', dark: '#3b82f6' } // the app's accent in each theme
 
 interface Props {
   lat: number
   lng: number
   label: string // what's at the pin, for screen readers
   onFail: () => void // no WebGL, or the tiles can't be reached
-  zoom?: number
 }
 
-export default function MapPreview({ lat, lng, label, onFail, zoom = 15 }: Props): ReactElement | null {
+export default function MapPreview({ lat, lng, label, onFail }: Props): ReactElement | null {
   const ref = useRef<HTMLDivElement>(null)
-  const mode = useIsDark() ? 'dark' : 'light'
+  const dark = useIsDark()
 
   useEffect(() => {
     if (!ref.current) return
@@ -31,10 +26,10 @@ export default function MapPreview({ lat, lng, label, onFail, zoom = 15 }: Props
     try {
       map = new maplibregl.Map({
         container: ref.current,
-        style: STYLES[mode],
+        style: dark ? STYLES.dark : STYLES.light,
         center: [lng, lat],
-        zoom,
-        interactive: false, // a preview; "Directions" opens a real map app
+        zoom: 15,
+        interactive: true,
         attributionControl: { compact: true },
       })
     } catch {
@@ -51,12 +46,14 @@ export default function MapPreview({ lat, lng, label, onFail, zoom = 15 }: Props
     })
     map.on('error', () => !loaded && onFail())
 
-    new maplibregl.Marker({ color: PIN[mode], scale: 0.9 }).setLngLat([lng, lat]).addTo(map)
+    map.scrollZoom.disable()
+    map.addControl(new maplibregl.NavigationControl(), 'top-right')
+    new maplibregl.Marker({ color: '#2563eb' }).setLngLat([lng, lat]).addTo(map)
     return () => {
       clearTimeout(timer)
       map.remove()
     }
-  }, [lat, lng, onFail, zoom, mode])
+  }, [lat, lng, onFail, dark])
 
-  return <div ref={ref} className="map-preview" role="img" aria-label={`Map showing ${label}`} />
+  return <div ref={ref} className="map-preview" role="region" aria-label={`Interactive map showing ${label}`} />
 }

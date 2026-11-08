@@ -1,14 +1,13 @@
-import { Globe, List, Navigation } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { getTrack2Issue } from "../api/client";
 import Discussion from "../components/Discussion";
-import DetailHero from "../components/DetailHero";
-import ScoreRing from "../components/ScoreRing";
+import PlaceSection from "../components/PlaceSection";
 import VoteControl from "../components/VoteControl";
 import VotesLeft from "../components/VotesLeft";
 import { categoryStyle } from "../data/categories";
-import { issueScore, VAN311_URL } from "../lib/issues";
+import { VAN311_URL } from "../lib/issues";
 import { useFeed } from "../state/feed";
 import type { Track2Issue, Vote } from "../types";
 
@@ -57,10 +56,19 @@ export default function IssuePage() {
   const goBack = () => (location.key !== "default" ? navigate(-1) : navigate("/issues"));
 
   return (
-    <div className="page place">
-      <main className="page-content flush">
-        {!issue && <DetailHero title="" place="" onBack={goBack} />}
-        {issue === undefined && !error && <div className="skeleton detail-pad" style={{ height: 280 }} aria-busy="true" />}
+    <div className="page">
+      <header className="home-header track-issues">
+        <div className="top-bar">
+          <button className="icon-button" onClick={goBack} aria-label="Back">
+            <ChevronLeft size={24} />
+          </button>
+          <p className="header-title">Issue</p>
+          <span aria-hidden="true" />
+        </div>
+      </header>
+
+      <main className="page-content">
+        {issue === undefined && !error && <div className="skeleton" style={{ height: 280 }} aria-busy="true" />}
 
         {error && !issue && (
           <div className="empty" role="alert">
@@ -88,71 +96,36 @@ export default function IssuePage() {
 
         {issue && (
           <>
-            <DetailHero
-              title={issue.request_type.replace(/ Case$/, "")}
-              lat={issue.lat}
-              lng={issue.lng}
-              place={issue.address ?? issue.local_area}
-              onBack={goBack}
-            />
-            <div className="detail-pad">
-              <article className="detail">
-                <div className="tag-row">
-                  <span className="tag-pill">
-                    <List size={16} aria-hidden="true" />
-                    {categoryStyle(issue.category).label}
-                  </span>
-                  <span className="tag-pill">
-                    <List size={16} aria-hidden="true" />
-                    Only the City can fix this
-                  </span>
-                </div>
-                <p className="accent-line">
-                  {[categoryStyle(issue.category).label, issue.local_area, `${issue.open_cases} open ${issue.open_cases === 1 ? "case" : "cases"}`].join(" · ")}
-                </p>
-                <p className="place-line">{issue.address ?? issue.local_area}</p>
+            <article className="detail">
+              <img className="detail-photo" src={issue.photo_url || '/issue-placeholder.png'} alt="" />
+              {!issue.photo_url && <p className="muted small">Illustrative image · not a photo of this issue</p>}
+              <p className="eyebrow">{categoryStyle(issue.category).label} · Only the City can fix this</p>
+              <h1>{issue.request_type.replace(/ Case$/, "")}</h1>
+              <p className="muted">{issue.address ?? issue.local_area}</p>
 
-                <div className="pill-row">
-                  <a className="pill-button" href={VAN311_URL} target="_blank" rel="noopener noreferrer">
-                    <Globe size={20} aria-hidden="true" />
-                    Van311
-                  </a>
-                  {issue.lat !== undefined && issue.lng !== undefined && (
-                    <a
-                      className="pill-button"
-                      href={`https://www.google.com/maps/dir/?api=1&destination=${issue.lat},${issue.lng}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <Navigation size={20} aria-hidden="true" />
-                      Directions
-                    </a>
-                  )}
-                </div>
+              <dl className="facts">
+                <dt>Open for</dt>
+                <dd className={issue.days_open >= 14 ? "overdue" : ""}>
+                  {issue.days_open} {issue.days_open === 1 ? "day" : "days"}
+                </dd>
+                <dt>Reported</dt>
+                <dd>
+                  {issue.times_reported_12m} {issue.times_reported_12m === 1 ? "time" : "times"} in the last 12 months
+                </dd>
+                <dt>Open cases</dt>
+                <dd>{issue.open_cases}</dd>
+              </dl>
+
+              <div className="card-action">
+                <a className="action-button secondary" href={VAN311_URL} target="_blank" rel="noopener noreferrer">
+                  Report it in Van311 ↗
+                </a>
                 <p className="muted small">Van311 is the City's own reporting app. We don't send anything to the City.</p>
+              </div>
+            </article>
 
-                <section className="detail-block" aria-labelledby="scores-heading">
-                  <h2 id="scores-heading">Scores</h2>
-                  <div className="score-row">
-                    <ScoreRing
-                      value={Math.round(issueScore(issue).score)}
-                      title="Priority"
-                      sub="votes, age and reports"
-                      badge={issueScore(issue).up}
-                    />
-                    <ScoreRing
-                      value={issue.days_open}
-                      title="Days open"
-                      sub={issue.days_open >= 14 ? "overdue" : "so far"}
-                      tone={issue.days_open >= 14 ? "warn" : "normal"}
-                    />
-                    <ScoreRing value={issue.times_reported_12m} title="Reports" sub="in the last 12 months" />
-                  </div>
-                </section>
-              </article>
-
-              <Discussion type="issue" id={issue.issue_id} />
-            </div>
+            <PlaceSection lat={issue.lat} lng={issue.lng} label={issue.address ?? issue.local_area} />
+            <Discussion type="issue" id={issue.issue_id} />
           </>
         )}
       </main>
