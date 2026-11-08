@@ -5,6 +5,7 @@ Space name suggestion: `Block by Block: Vancouver 311`. Warehouse: the same SQL 
 ## Tables to add to the Genie space
 
 - `bbb.gold.cases_enriched`
+- `bbb.gold.recurring_issues`
 - `bbb.gold.help_hotspots`
 - `bbb.gold.track2_issues`
 - `bbb.gold.hotspots_h3`
@@ -17,7 +18,7 @@ Space name suggestion: `Block by Block: Vancouver 311`. Warehouse: the same SQL 
 This data is Vancouver 311 service requests. Every request type has an AI-assigned track. Track 1 (`track = 'neighbours'`) means volunteers and neighbours can help, for example graffiti, litter and small dumping. Track 2 (`track = 'city'`) means only the City can fix it, for example potholes and street repair. `track = 'none'` means neither applies.
 In `cases_enriched`, `status` is only `Open` or `Close`. `opened_at` is Vancouver local time. About a third of cases have coordinates (`latitude`, `longitude`), and 21% of cases have no `local_area`, so filter out NULL `local_area` when grouping by neighbourhood.
 `h3_r9` is an H3 cell at resolution 9, roughly a city block or two. `base_score` in `track2_issues` ranks Track 2 issues by days open plus repeat reports; a higher score is more pressing. `resolution_days` can be null for open cases, so filter `closed_on IS NOT NULL` when measuring how fast cases close.
-`track_overrides` holds a few hand-made corrections to the AI track; the final track for a request type is `coalesce(o.track, t.ai_track)` when joining `type_categories` t to `track_overrides` o. When the user says "last week", "this year" or "recently", measure from the latest `opened_at` in the data, not from today's date, because the data may lag behind.
+`track_overrides` holds a few hand-made corrections to the AI track; the final track for a request type is `coalesce(o.track, t.ai_track)` when joining `type_categories` t to `track_overrides` o. When the user says "last week", "this year" or "recently", measure from the latest `opened_at` in the data, not from today's date, because the data may lag behind. Questions about how fast "the City" closes cases cover all closed cases in `cases_enriched`; do not add a `track` filter unless the user names a track, and rank categories by median `resolution_days`.
 
 ## Sample questions and SQL
 
@@ -76,3 +77,15 @@ SELECT local_area, count(*) AS reports FROM bbb.gold.cases_enriched WHERE catego
 ```sql
 SELECT date_trunc('month', opened_at) AS month, count(*) AS reports FROM bbb.gold.cases_enriched WHERE year(opened_at) = (SELECT year(max(opened_at)) FROM bbb.gold.cases_enriched) GROUP BY ALL ORDER BY month;
 ```
+
+## Creating or updating the space
+
+From the repo root, with the `databricks` CLI logged in:
+
+```
+python databricks/genie/create_space.py
+```
+
+The script reads this file and creates the space `Block by Block: Vancouver 311`, or updates it if it already exists. Note the space list can lag a few seconds behind a create, so do not run it twice in quick succession on a first run.
+
+Space: https://dbc-7f6625ff-1e9b.cloud.databricks.com/genie/rooms/01f1db2da43c1526bbb552326b18618c
