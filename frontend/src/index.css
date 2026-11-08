@@ -359,6 +359,7 @@ a.tile:hover h3,
 /* ---------- Issues list: one row each, the vote split off by a thin line ---------- */
 .issue-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr); /* a long title gets cut off instead of pushing the vote off screen */
   gap: 8px;
   margin: 0 0 16px;
   padding: 0;

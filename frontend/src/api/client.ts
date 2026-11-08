@@ -62,7 +62,8 @@ export async function getHelpHotspots(): Promise<HelpHotspot[]> {
     return HELP_HOTSPOTS.map((h) => ({ ...h }));
   }
   // TODO(backend): GET /hotspots → gold_help_hotspots with lat/lng (H3 cell centre), most reported first.
-  return request<HelpHotspot[]>("/hotspots");
+  // until the API has this route, a 404 just means no "Needs help" list
+  return (await requestOrNull<HelpHotspot[]>("/hotspots")) ?? [];
 }
 
 /** Start an event, usually from a hotspot. The signed-in user is the host. */
@@ -108,7 +109,8 @@ export async function getTrack2Issues(): Promise<Track2Issue[]> {
   }
   // TODO(backend): GET /issues → gold_track2_issues joined with `votes` and a comment_count.
   // up_votes/down_votes should NOT include the current user's vote; that goes in my_vote.
-  return request<Track2Issue[]>("/issues");
+  // The full list is ~3,000 issues (1.2 MB). The API sends them most pressing first, so the top 500 is plenty.
+  return request<Track2Issue[]>("/issues?limit=500");
 }
 
 /** One issue, or null if it doesn't exist (for example, the City closed it). */
@@ -143,7 +145,7 @@ export async function getMyHistory(): Promise<VolunteerRecord[]> {
   }
   // TODO(backend): GET /me/history → the user's rsvps on events with done_at set.
   // hours = the host's count if they recorded one, otherwise the event's length.
-  return request<VolunteerRecord[]>("/me/history");
+  return (await requestOrNull<VolunteerRecord[]>("/me/history")) ?? [];
 }
 
 // ---------- Comments (the discussion under each post) ----------
