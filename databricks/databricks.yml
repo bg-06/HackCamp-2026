@@ -40,16 +40,22 @@ resources:
 
   jobs:
     # Daily: Postgres -> bronze/silver/gold -> rankings -> summaries -> back to Postgres.
-    # The 311 fetch into Postgres (teammate) runs before this; add it as the first task when it exists.
+    # ingest_311 fetches the new 311 rows into Postgres; the pipeline then reads them.
     bbb_daily:
       name: bbb_daily
       schedule:
         quartz_cron_expression: "0 0 6 * * ?"   # 06:00 Vancouver, after the portal's nightly refresh
         timezone_id: America/Vancouver
-        pause_status: PAUSED                     # unpause after the first good manual run
+        # The dev target (mode: development) forces PAUSED on every deploy; after `databricks bundle deploy` unpause with:
+        # databricks jobs update --json '{"job_id": <bbb_daily job id>, "new_settings": {"schedule": {"quartz_cron_expression": "0 0 6 * * ?", "timezone_id": "America/Vancouver", "pause_status": "UNPAUSED"}}}'
+        pause_status: UNPAUSED
       max_concurrent_runs: 1
       tasks:
+        - task_key: ingest_311
+          notebook_task:
+            notebook_path: ./notebooks/ingest_311.py
         - task_key: pipeline_refresh
+          depends_on: [{ task_key: ingest_311 }]
           pipeline_task:
             pipeline_id: ${resources.pipelines.t311_pipeline.id}
         - task_key: freeze_type_labels
