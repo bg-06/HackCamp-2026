@@ -191,10 +191,10 @@ export async function getDisplayName(): Promise<string | null> {
   return (await request<{ displayName: string | null }>("/me/profile")).displayName;
 }
 
-/** Sets the name shown on your comments and the events you host. Real API only. */
-export async function saveDisplayName(displayName: string): Promise<void> {
-  if (USE_MOCK) return;
-  await request<{ displayName: string }>("/me/profile", { method: "PUT", body: JSON.stringify({ displayName }) });
+/** Sets the name shown on your comments and the events you host, and returns it as the API stored it. Real API only. */
+export async function saveDisplayName(displayName: string): Promise<string> {
+  if (USE_MOCK) return displayName;
+  return (await request<{ displayName: string }>("/me/profile", { method: "PUT", body: JSON.stringify({ displayName }) })).displayName;
 }
 
 // ---------- Comments (the discussion under each post) ----------

@@ -3,24 +3,31 @@ import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { getProfileDesign, PROFILE_COMPARISON_ENABLED, saveProfileDesign, type ProfileDesign } from '../lib/profileDesign'
 import { useThemePref } from '../lib/theme'
-import { useAuth } from '../state/auth'
+import { ApiError } from '../api/client'
+import { isValidName, tidyName, useAuth } from '../state/auth'
+
+const BAD_NAME = 'Use 1–60 characters, without < or >.'
 
 export default function SettingsPage() {
   const [theme, setTheme] = useThemePref()
   const { signedIn, name, rename } = useAuth()
   const [draft, setDraft] = useState<string | null>(null)
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [error, setError] = useState('')
   const value = draft ?? name ?? ''
 
   async function saveName(e: FormEvent) {
     e.preventDefault()
+    const fail = (message: string) => { setError(message); setStatus('error') }
+    if (!isValidName(tidyName(value))) return fail(BAD_NAME)
     setStatus('saving')
     try {
       await rename(value)
       setDraft(null)
       setStatus('saved')
-    } catch {
-      setStatus('error')
+    } catch (err) {
+      const code = err instanceof ApiError ? err.status : 0
+      fail(code === 400 ? BAD_NAME : code === 401 ? 'Please sign in again, then save.' : "Couldn't save your name. Check your connection and try again.")
     }
   }
 
@@ -55,11 +62,11 @@ export default function SettingsPage() {
                   onChange={(e) => { setDraft(e.target.value); setStatus('idle') }}
                 />
               </label>
-              <button type="submit" className="chip-button" disabled={status === 'saving' || !value.trim() || value.trim() === name}>
+              <button type="submit" className="chip-button" disabled={status === 'saving' || !value.trim() || tidyName(value) === name}>
                 {status === 'saving' ? 'Saving…' : 'Save name'}
               </button>
               <p className="muted small" role="status">
-                {status === 'saved' ? 'Name updated.' : status === 'error' ? "Couldn't save that name. Avoid < and >, and try again." : ''}
+                {status === 'saved' ? 'Name updated.' : status === 'error' ? error : ''}
               </p>
             </form>
           </section>

@@ -797,7 +797,6 @@ a.tile:hover h3,
 }
 .tile.skeleton {
   border-color: transparent;
-  border-radius: var(--card-radius);
 }
 @keyframes pulse {
   from {
