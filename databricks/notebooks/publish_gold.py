@@ -4,16 +4,26 @@
 #
 # Each table is swapped in one transaction (TRUNCATE + COPY), so the app never sees a half-written
 # table. Postgres credentials come from the `bbb` secret scope (databricks/setup/setup_postgres.py).
+#
+# Driver: pg8000 (pure Python). psycopg[binary] aborts the Python process on Databricks serverless
+# (SIGABRT while loading its bundled libpq/OpenSSL), so it can't be used here.
+# TLS: the connection is encrypted, but the server's self-signed certificate isn't verified
+# (the same protection as libpq's sslmode=require, which the rest of the project uses).
+# Team decision, 2026-11-08.
 
 # COMMAND ----------
 
-# MAGIC %pip install "psycopg[binary]>=3.2" --quiet
+# MAGIC %pip install "pg8000>=1.31" --quiet
 
 # COMMAND ----------
 
+import csv
+import io
 import pathlib
+import re
+import ssl
 
-import psycopg
+import pg8000.native
 
 spark.conf.set("spark.sql.session.timeZone", "UTC")  # naive datetimes below are UTC / local as noted in DDL
 
@@ -40,49 +50,85 @@ TABLES = {
 # These may legitimately be empty (no finished events yet); the rest being empty means something broke.
 ALLOW_EMPTY = {"gold_event_impact"}
 
+DDL_PATH = pathlib.Path.cwd().parent / "postgres" / "gold_tables.sql"
+
 
 def secret(key):
     return dbutils.secrets.get("bbb", key)
 
 
 def source_exists(query):
-    import re
     return all(spark.catalog.tableExists(t) for t in re.findall(r"FROM\s+(bbb\.gold\.\w+)", query))
 
 
-DDL = (pathlib.Path.cwd().parent / "postgres" / "gold_tables.sql").read_text()
+def ddl_statements(text):
+    """Split a SQL file into statements. Strips -- comments first (they can contain ';')."""
+    code = re.sub(r"--[^\n]*", "", text)
+    return [s.strip() for s in code.split(";") if s.strip()]
 
-conn = psycopg.connect(
-    host=secret("pg_host"), port=secret("pg_port"), dbname=secret("pg_db"),
-    user=secret("pg_user"), password=secret("pg_password"), sslmode=secret("pg_sslmode"),
-    connect_timeout=20, options="-c TimeZone=UTC",
-)
 
+def to_csv(rows):
+    """Rows -> CSV for COPY ... WITH (FORMAT csv). None becomes an unquoted empty field (NULL);
+    every other value is quoted, so an empty string stays an empty string."""
+    buf = io.StringIO()
+    csv.writer(buf, quoting=csv.QUOTE_NOTNULL, lineterminator="\n").writerows(rows)
+    buf.seek(0)
+    return buf
+
+
+def connect():
+    if secret("pg_sslmode") == "disable":
+        raise RuntimeError("pg_sslmode is 'disable'; publish_gold only connects with TLS.")
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False       # self-signed certificate: encrypt, don't verify (sslmode=require)
+    ctx.verify_mode = ssl.CERT_NONE
+    return pg8000.native.Connection(
+        user=secret("pg_user"), password=secret("pg_password"), host=secret("pg_host"),
+        port=int(secret("pg_port")), database=secret("pg_db"), ssl_context=ctx, timeout=30,
+    )
+
+
+# COMMAND ----------
+
+conn = connect()
 published, skipped = {}, {}
-with conn:
-    with conn.transaction():
-        conn.execute(DDL)
+try:
+    conn.run("SET TimeZone = 'UTC'")
+
+    conn.run("BEGIN")
+    try:
+        for stmt in ddl_statements(DDL_PATH.read_text()):
+            conn.run(stmt)
+        conn.run("COMMIT")
+    except Exception:
+        conn.run("ROLLBACK")
+        raise
 
     for table, query in TABLES.items():
         if not source_exists(query):
             skipped[table] = "source not built yet"
             continue
         df = spark.sql(query)
-        rows = df.collect()  # all small: a few thousand rows at most
+        rows = [tuple(r) for r in df.collect()]  # all small: a few thousand rows at most
         if not rows and table not in ALLOW_EMPTY:
             skipped[table] = "0 rows from Databricks; kept the old Postgres copy"
             continue
-        with conn.transaction(), conn.cursor() as cur:
-            cur.execute(f"TRUNCATE {table}")
-            with cur.copy(f"COPY {table} ({', '.join(df.columns)}) FROM STDIN") as copy:
-                for r in rows:
-                    copy.write_row(tuple(r))
-            cur.execute(
-                "INSERT INTO gold_published (table_name, row_count, published_at) VALUES (%s, %s, now()) "
+        conn.run("BEGIN")
+        try:
+            conn.run(f"TRUNCATE {table}")
+            conn.run(f"COPY {table} ({', '.join(df.columns)}) FROM STDIN WITH (FORMAT csv)", stream=to_csv(rows))
+            conn.run(
+                "INSERT INTO gold_published (table_name, row_count, published_at) VALUES (:t, :n, now()) "
                 "ON CONFLICT (table_name) DO UPDATE SET row_count = EXCLUDED.row_count, published_at = now()",
-                (table, len(rows)),
+                t=table, n=len(rows),
             )
+            conn.run("COMMIT")
+        except Exception:
+            conn.run("ROLLBACK")
+            raise
         published[table] = len(rows)
+finally:
+    conn.close()
 
 print("published:", published)
 print("skipped:", skipped)
