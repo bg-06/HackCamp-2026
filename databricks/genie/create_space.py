@@ -5,6 +5,8 @@ Run from the repo root (the databricks CLI must be logged in):
     python databricks/genie/create_space.py
 
 Idempotent: if a space titled TITLE exists it is updated, otherwise created.
+It only finds spaces you can access: a teammate without access to the existing space would create a second one,
+so share the space with the team or ask its owner to re-run the script.
 Uses only the standard library and the `databricks` CLI.
 """
 import json
@@ -15,7 +17,7 @@ import sys
 from pathlib import Path
 
 TITLE = "Block by Block: Vancouver 311"
-WAREHOUSE_ID = "2f68997ea797ec69"
+WAREHOUSE_ID = "2f68997ea797ec69"  # must match the warehouse_id variable default in databricks/databricks.yml
 DESCRIPTION = "Ask questions about Vancouver 311 service requests, hotspots and City issues."
 INSTRUCTIONS = Path(__file__).with_name("instructions.md")
 

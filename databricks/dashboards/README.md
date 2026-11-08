@@ -12,9 +12,10 @@ Tracks use fixed colours from the app: `neighbours` green `#2f7a2a`, `city` mapl
 ## Editing it
 
 1. Edit the deployed dashboard in the Databricks UI (Dashboards), or edit the JSON file directly.
-2. To pull UI changes back into the repo:
-   `databricks bundle generate dashboard --existing-id <dashboard id> --resource block_by_block`
-   (or copy the JSON from the dashboard's **File > Export**), then commit the `.lvdash.json`.
+2. To pull UI changes back into the repo, from the `databricks/` folder:
+   `databricks bundle generate dashboard --resource block_by_block --dashboard-dir dashboards --force`
+   This overwrites `./dashboards/block_by_block.lvdash.json` with the deployed dashboard. Add `--watch` to keep
+   syncing while you edit in the UI. Then commit the `.lvdash.json`. (Or copy the JSON from the dashboard's **File > Export**.)
 3. Deploy again. Keep `queries.sql` in sync with the dataset queries.
 
-Note: queries 3, 4 and 5 filter relative to today's date (last 12 months or 90 days). The data reaches 2026-11-07, so they return rows now; if the data stops updating, those charts will thin out and eventually go empty.
+Note: queries 3, 4 and 5 filter relative to today's date (last 12 months or 90 days). The data is refreshed daily up to about yesterday, so they return rows; if the data stops updating, those charts thin out and eventually go empty.

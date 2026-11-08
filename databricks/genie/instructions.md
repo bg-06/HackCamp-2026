@@ -1,6 +1,6 @@
 # Genie space instructions
 
-Space name suggestion: `Block by Block: Vancouver 311`. Warehouse: the same SQL warehouse as the dashboard.
+Space name: `Block by Block: Vancouver 311`. Warehouse: the same SQL warehouse as the dashboard.
 
 ## Tables to add to the Genie space
 
@@ -13,7 +13,7 @@ Space name suggestion: `Block by Block: Vancouver 311`. Warehouse: the same SQL 
 - `bbb.gold.type_categories`
 - `bbb.gold.track_overrides`
 
-## General instructions (paste into the Instructions box)
+## General instructions
 
 This data is Vancouver 311 service requests. Every request type has an AI-assigned track. Track 1 (`track = 'neighbours'`) means volunteers and neighbours can help, for example graffiti, litter and small dumping. Track 2 (`track = 'city'`) means only the City can fix it, for example potholes and street repair. `track = 'none'` means neither applies.
 In `cases_enriched`, `status` is only `Open` or `Close`. `opened_at` is Vancouver local time. About a third of cases have coordinates (`latitude`, `longitude`), and 21% of cases have no `local_area`, so filter out NULL `local_area` when grouping by neighbourhood.
@@ -22,7 +22,7 @@ In `cases_enriched`, `status` is only `Open` or `Close`. `opened_at` is Vancouve
 
 ## Sample questions and SQL
 
-Add each as an example SQL query in the Genie space. Questions 1-8 are the required set; 3 has an alternative version.
+The script adds each one as an example SQL query in the Genie space. Questions 1-8 are the required set; 3 has an alternative version.
 
 ### 1. Which neighbourhood has the most recurring dumping?
 
@@ -87,5 +87,7 @@ python databricks/genie/create_space.py
 ```
 
 The script reads this file and creates the space `Block by Block: Vancouver 311`, or updates it if it already exists. Note the space list can lag a few seconds behind a create, so do not run it twice in quick succession on a first run.
+
+The script only finds spaces you can access. A teammate without access to the existing space would create a second one, so share the space with the team or ask its owner to re-run the script.
 
 Space: https://dbc-7f6625ff-1e9b.cloud.databricks.com/genie/rooms/01f1db2da43c1526bbb552326b18618c
